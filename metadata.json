@@ -1,0 +1,12 @@
+{
+  "name": "Administracion de condominios",
+  "description": "Sistema integral de Administración de Condominios con gestión de finanzas, cobro de cuotas, reservación de amenidades, votaciones, tickets y comunicación vecinal.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

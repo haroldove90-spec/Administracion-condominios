@@ -1,0 +1,218 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Validation Blueprint for AuthorizedUser
+    function isValidAuthorizedUser(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+             data.documentId is string && data.documentId.size() > 0 && data.documentId.size() <= 100 &&
+             data.status in ['active', 'suspended', 'expired'] &&
+             data.qrcodeToken is string && data.qrcodeToken.size() > 0 && data.qrcodeToken.size() <= 500 &&
+             data.oneTime is bool &&
+             data.used is bool &&
+             data.validFrom is string && data.validFrom.size() <= 100 &&
+             data.validUntil is string && data.validUntil.size() <= 100 &&
+             (!('days' in data) || data.days is list) &&
+             (!('startTime' in data) || data.startTime is string) &&
+             (!('endTime' in data) || data.endTime is string) &&
+             (!('email' in data) || data.email is string) &&
+             (!('phone' in data) || data.phone is string) &&
+             (!('createdAt' in data) || data.createdAt is string) &&
+             (!('updatedAt' in data) || data.updatedAt is string) &&
+             (!('createdBy' in data) || data.createdBy is string) &&
+             (!('residenciaId' in data) || data.residenciaId is string) &&
+             (!('residenciaNombre' in data) || data.residenciaNombre is string) &&
+             (!('isResidentCreated' in data) || data.isResidentCreated is bool) &&
+             (!('residentName' in data) || data.residentName is string) &&
+             (!('residentPhone' in data) || data.residentPhone is string);
+    }
+
+    // Validation Blueprint for AccessLog
+    function isValidAccessLog(data) {
+      return data.userId is string && data.userId.size() <= 128 &&
+             data.userName is string && data.userName.size() <= 200 &&
+             data.timestamp is string && data.timestamp.size() <= 100 &&
+             data.type in ['check-in', 'check-out'] &&
+             data.status in ['success', 'revoked_user', 'outside_schedule', 'already_used', 'expired_token'] &&
+             data.guardId is string && data.guardId.size() <= 128 &&
+             data.guardName is string && data.guardName.size() <= 200 &&
+             (!('documentId' in data) || data.documentId is string) &&
+             (!('residenciaId' in data) || data.residenciaId is string) &&
+             (!('residenciaNombre' in data) || data.residenciaNombre is string) &&
+             (!('casetaId' in data) || data.casetaId is string) &&
+             (!('casetaNombre' in data) || data.casetaNombre is string);
+    }
+
+    // Validation Blueprint for SystemRole
+    function isValidSystemRole(data) {
+      return (!('email' in data) || data.email is string) &&
+             (!('name' in data) || data.name is string) &&
+             data.role in ['admin', 'guard', 'supervisor', 'auditor', 'residente', 'condominios'] &&
+             (!('username' in data) || data.username is string) &&
+             (!('password' in data) || data.password is string) &&
+             (!('phone' in data) || data.phone is string) &&
+             (!('isActive' in data) || data.isActive is bool) &&
+             (!('residenciaId' in data) || data.residenciaId is string) &&
+             (!('residenciaNombre' in data) || data.residenciaNombre is string) &&
+             (!('casetaId' in data) || data.casetaId is string) &&
+             (!('casetaNombre' in data) || data.casetaNombre is string) &&
+             (!('avatar' in data) || data.avatar is string) &&
+             (!('createdAt' in data) || data.createdAt is string);
+    }
+
+    // Validation Blueprint for Residencia
+    function isValidResidencia(data) {
+      return data.nombre is string && data.nombre.size() > 0 && data.nombre.size() <= 200 &&
+             data.administrador is string && data.administrador.size() > 0 && data.administrador.size() <= 200 &&
+             data.numResidencias is int && data.numResidencias >= 0 &&
+             data.isActive is bool &&
+             (!('createdAt' in data) || data.createdAt is string) &&
+             (!('updatedAt' in data) || data.updatedAt is string) &&
+             (!('panicActive' in data) || data.panicActive is bool) &&
+             (!('panicLatitude' in data) || data.panicLatitude == null || data.panicLatitude is number) &&
+             (!('panicLongitude' in data) || data.panicLongitude == null || data.panicLongitude is number) &&
+             (!('panicTriggeredBy' in data) || data.panicTriggeredBy == null || data.panicTriggeredBy is string) &&
+             (!('panicTriggeredByRole' in data) || data.panicTriggeredByRole == null || data.panicTriggeredByRole is string) &&
+             (!('panicTriggeredAt' in data) || data.panicTriggeredAt == null || data.panicTriggeredAt is string);
+    }
+
+    // Validation Blueprint for Residente
+    function isValidResidente(data) {
+      return data.nombre is string && data.nombre.size() > 0 && data.nombre.size() <= 200 &&
+             data.residenciaId is string && data.residenciaId.size() > 0 &&
+             data.residenciaNombre is string && data.residenciaNombre.size() > 0 &&
+             data.direccion is string && data.direccion.size() > 0 && data.direccion.size() <= 500 &&
+             data.qrcodeToken is string && data.qrcodeToken.size() > 0 &&
+             (!('whatsapp' in data) || data.whatsapp is string) &&
+             (!('accessUserId' in data) || data.accessUserId is string) &&
+             (!('username' in data) || data.username is string) &&
+             (!('password' in data) || data.password is string) &&
+             (!('isActive' in data) || data.isActive is bool) &&
+             (!('validUntil' in data) || data.validUntil is string) &&
+             (!('createdAt' in data) || data.createdAt is string) &&
+             (!('updatedAt' in data) || data.updatedAt is string);
+    }
+
+    // Validation Blueprint for Caseta
+    function isValidCaseta(data) {
+      return data.nombre is string && data.nombre.size() > 0 && data.nombre.size() <= 200 &&
+             data.residenciaId is string && data.residenciaId.size() > 0 &&
+             data.residenciaNombre is string && data.residenciaNombre.size() > 0 &&
+             data.isActive is bool &&
+             (!('createdAt' in data) || data.createdAt is string) &&
+             (!('updatedAt' in data) || data.updatedAt is string);
+    }
+
+    // Validation Blueprint for Marbete
+    function isValidMarbete(data) {
+      return data.residenteId is string && data.residenteId.size() > 0 &&
+             data.residenteNombre is string && data.residenteNombre.size() > 0 &&
+             data.residenciaId is string && data.residenciaId.size() > 0 &&
+             data.residenciaNombre is string && data.residenciaNombre.size() > 0 &&
+             data.status in ['active', 'suspended', 'expired'] &&
+             data.qrcodeToken is string && data.qrcodeToken.size() > 0 &&
+             data.validFrom is string && data.validFrom.size() <= 100 &&
+             data.validUntil is string && data.validUntil.size() <= 100 &&
+             (!('consecutivo' in data) || data.consecutivo is int || data.consecutivo is number) &&
+             (!('vehiculoPlacas' in data) || data.vehiculoPlacas is string) &&
+             (!('vehiculoInfo' in data) || data.vehiculoInfo is string) &&
+             (!('createdAt' in data) || data.createdAt is string) &&
+             (!('updatedAt' in data) || data.updatedAt is string);
+    }
+
+    // Validation Blueprint for Evidencia
+    function isValidEvidencia(data) {
+      return data.residenciaId is string &&
+             data.residenciaNombre is string &&
+             data.guardId is string &&
+             data.guardName is string &&
+             data.photoUrl is string &&
+             data.timestamp is string &&
+             (!('casetaId' in data) || data.casetaId is string) &&
+             (!('casetaNombre' in data) || data.casetaNombre is string) &&
+             (!('placas' in data) || data.placas is string) &&
+             (!('notas' in data) || data.notas is string) &&
+             (!('tipo' in data) || data.tipo is string);
+    }
+
+    // 2. Collection Rules
+
+    // Collection: system_roles
+    match /system_roles/{uid} {
+      allow read: if true;
+      allow create, update: if isValidId(uid) && isValidSystemRole(incoming());
+      allow delete: if isValidId(uid);
+    }
+
+    // Collection: authorized_users
+    match /authorized_users/{userId} {
+      allow read: if true;
+      allow create, update: if isValidId(userId) && isValidAuthorizedUser(incoming());
+      allow delete: if isValidId(userId);
+    }
+
+    // Collection: access_logs
+    match /access_logs/{logId} {
+      allow read: if true;
+      allow create: if isValidId(logId) && isValidAccessLog(incoming());
+      allow update, delete: if false;
+    }
+
+    // Collection: residencias
+    match /residencias/{residenciaId} {
+      allow read: if true;
+      allow create, update: if isValidId(residenciaId) && isValidResidencia(incoming());
+      allow delete: if isValidId(residenciaId);
+    }
+
+    // Collection: residentes
+    match /residentes/{residenteId} {
+      allow read: if true;
+      allow create, update: if isValidId(residenteId) && isValidResidente(incoming());
+      allow delete: if isValidId(residenteId);
+    }
+
+    // Collection: casetas
+    match /casetas/{casetaId} {
+      allow read: if true;
+      allow create, update: if isValidId(casetaId) && isValidCaseta(incoming());
+      allow delete: if isValidId(casetaId);
+    }
+
+    // Collection: marbetes
+    match /marbetes/{marbeteId} {
+      allow read: if true;
+      allow create, update: if isValidId(marbeteId) && isValidMarbete(incoming());
+      allow delete: if isValidId(marbeteId);
+    }
+
+    // Collection: evidencias
+    match /evidencias/{evidenciaId} {
+      allow read: if true;
+      allow create, update: if isValidId(evidenciaId) && isValidEvidencia(incoming());
+      allow delete: if isValidId(evidenciaId);
+    }
+  }
+}
+
