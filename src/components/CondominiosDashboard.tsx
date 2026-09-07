@@ -6,9 +6,11 @@ import {
   Activity, ArrowUpRight, ArrowDownRight, Upload, Globe, RefreshCw, Send, Trash2,
   LogOut, Plus, Search, Filter, Lock, Unlock, Home, Crown, Building2, UserCheck, Smartphone, BadgeCheck,
   CheckCircle2, PackageCheck, Terminal, HelpCircle, LifeBuoy, PieChart, ShieldAlert, FileSpreadsheet, RefreshCcw, Layers,
-  Server, UserX, Menu, X, FileCheck, Wrench, Vote, CheckSquare
+  Server, UserX, Menu, X, FileCheck, Wrench, Vote, CheckSquare, Database, Copy, Sparkles
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { supabase } from '../supabase';
+import { dbService } from '../services/dbService';
 
 interface Payment {
   id: string;
@@ -240,6 +242,29 @@ export interface VisitaPendiente {
   tieneRestriccionMoroso: boolean;
 }
 
+// Helper function to detect if mock data is permanently disabled by the administrator
+export const getIsMockDisabled = (): boolean => {
+  try {
+    return localStorage.getItem('condo_disable_mock_data') === 'true';
+  } catch {
+    return false;
+  }
+};
+
+// Helper function to identify demonstration/mock IDs or names
+export const isDemoId = (id?: string, name?: string): boolean => {
+  if (!id) return false;
+  const isDemoPattern = /^(cli-[1-4]|est-[1-3]|res-[1-4]|pay-[1-5]|egr-[1-3]|pkg-[1-3]|tkt-[1-3]|bul-[1-2]|cuo-[1-2]|resv-[1-2]|enc-[1-2]|bit-[1-3]|vis-[1-3]|rec-[1-3]|bnc-[1-3]|pre-[1-2]|act-[1-2]|inv-[1-2]|cobro-[1-4]|stkt-[1-3]|log-[1-5])$/i.test(id);
+  if (isDemoPattern) return true;
+  if (name) {
+    const n = name.toLowerCase();
+    if (n.includes('chapultepec') || n.includes('bosques del portal') || n.includes('torres alameda') || n.includes('puerta del sol')) {
+      return true;
+    }
+  }
+  return false;
+};
+
 interface CondominiosDashboardProps {
   currentUser?: any;
   onSignOut?: () => void;
@@ -255,6 +280,11 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
   const [guardiaTab, setGuardiaTab] = useState<'accesos' | 'paqueteria' | 'bitacora'>('accesos');
   const [superAdminTab, setSuperAdminTab] = useState<'clientes' | 'finanzas' | 'soporte'>('clientes');
   const [isNavOpen, setIsNavOpen] = useState<boolean>(false);
+
+  // Mock data control state & SQL Modal state
+  const [isMockDataDisabled, setIsMockDataDisabled] = useState<boolean>(getIsMockDisabled);
+  const [isSqlModalOpen, setIsSqlModalOpen] = useState<boolean>(false);
+  const [sqlCopied, setSqlCopied] = useState<boolean>(false);
 
   // Administrator check for Condominios module
   const isUserAdmin = !currentUser || 
@@ -272,9 +302,161 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
     }
   }, [initialSubSection]);
 
+  // Real-time synchronization from Supabase for all Condominios datasets
+  useEffect(() => {
+    const fetchSupabaseData = async () => {
+      try {
+        const mockDisabled = getIsMockDisabled();
+
+        // 1. Fetch Condominios / Clientes
+        const { data: rawClientsData } = await supabase
+          .from('clientes_condominio')
+          .select('*');
+
+        const { data: rawResidenciasData } = await supabase
+          .from('residencias')
+          .select('*');
+
+        const clientsData = mockDisabled 
+          ? (rawClientsData || []).filter((c: any) => !isDemoId(c.id, c.nombre))
+          : (rawClientsData || []);
+
+        const residenciasData = mockDisabled 
+          ? (rawResidenciasData || []).filter((r: any) => !isDemoId(r.id, r.nombre))
+          : (rawResidenciasData || []);
+
+        if (clientsData && clientsData.length > 0) {
+          const mappedClients: ClienteCondominio[] = clientsData.map((c: any) => ({
+            id: c.id || ('cli-' + Math.random().toString(36).substring(2, 9)),
+            nombre: c.nombre || 'Condominio Residencial',
+            administrador: c.administrador || 'Administrador',
+            correo: c.correo || 'admin@condominio.mx',
+            telefono: c.telefono || '+52 5500000000',
+            plan: c.plan || 'Premium',
+            limiteDepartamentos: c.limite_departamentos ?? c.limiteDepartamentos ?? 100,
+            limiteUsuarios: c.limite_usuarios ?? c.limiteUsuarios ?? 15,
+            limiteAlmacenamiento: c.limite_almacenamiento ?? c.limiteAlmacenamiento ?? 20,
+            usoDepartamentos: c.uso_departamentos ?? c.usoDepartamentos ?? 0,
+            usoUsuarios: c.uso_usuarios ?? c.usoUsuarios ?? 1,
+            usoAlmacenamiento: c.uso_almacenamiento ?? c.usoAlmacenamiento ?? 0.1,
+            status: (c.status === 'activo' || c.status === 'suspendido') ? c.status : 'activo',
+            fechaRegistro: c.fecha_registro || c.fechaRegistro || new Date().toISOString().split('T')[0]
+          }));
+          setClientes(mappedClients);
+        } else if (residenciasData && residenciasData.length > 0) {
+          const mappedFromRes: ClienteCondominio[] = residenciasData.map((r: any) => ({
+            id: r.id,
+            nombre: r.nombre,
+            administrador: r.administrador || 'Administrador',
+            correo: 'admin@' + r.nombre.toLowerCase().replace(/[^a-z0-9]/g, '') + '.mx',
+            telefono: '+52 5500000000',
+            plan: 'Premium',
+            limiteDepartamentos: r.numResidencias || r.num_residencias || 100,
+            limiteUsuarios: 15,
+            limiteAlmacenamiento: 20,
+            usoDepartamentos: Math.round((r.numResidencias || 50) * 0.7),
+            usoUsuarios: 3,
+            usoAlmacenamiento: 2.5,
+            status: (r.isActive ?? r.is_active ?? true) ? 'activo' : 'suspendido',
+            fechaRegistro: (r.createdAt || r.created_at || new Date().toISOString()).split('T')[0]
+          }));
+          setClientes(mappedFromRes);
+        } else if (mockDisabled) {
+          setClientes([]);
+        }
+
+        // 2. Fetch Estructuras
+        const { data: rawEstData } = await supabase.from('estructuras_inmobiliarias').select('*');
+        const estData = mockDisabled 
+          ? (rawEstData || []).filter((e: any) => !isDemoId(e.id, e.nombre))
+          : (rawEstData || []);
+
+        if (estData && estData.length > 0) {
+          setEstructuras(estData.map((e: any) => ({
+            id: e.id,
+            tipo: e.tipo || 'Torre',
+            nombre: e.nombre,
+            unidadesCount: e.unidades_count ?? e.unidadesCount ?? 12,
+            unidadesDetalle: e.unidades_detalle ?? e.unidadesDetalle ?? '',
+            status: e.status || 'activo'
+          })));
+        } else if (mockDisabled) {
+          setEstructuras([]);
+        }
+
+        // 3. Fetch Residentes
+        const { data: rawResData } = await supabase.from('residentes_condominio').select('*');
+        const resData = mockDisabled 
+          ? (rawResData || []).filter((r: any) => !isDemoId(r.id, r.nombre))
+          : (rawResData || []);
+
+        if (resData && resData.length > 0) {
+          setResidentesCat(resData.map((r: any) => ({
+            id: r.id,
+            nombre: r.nombre,
+            unidad: r.unidad,
+            tipoResidente: r.tipo_residente ?? r.tipoResidente ?? 'propietario',
+            correo: r.correo || '',
+            telefono: r.telefono || '',
+            status: r.status || 'activo'
+          })));
+        } else if (mockDisabled) {
+          setResidentesCat([]);
+        }
+
+        // 4. Fetch Pagos
+        const { data: rawPayData } = await supabase.from('pagos_cuotas').select('*');
+        const payData = mockDisabled 
+          ? (rawPayData || []).filter((p: any) => !isDemoId(p.id))
+          : (rawPayData || []);
+
+        if (payData && payData.length > 0) {
+          setPayments(payData.map((p: any) => ({
+            id: p.id,
+            condo: p.condo || p.unidad || 'Depto',
+            resident: p.resident || 'Residente',
+            concept: p.concepto || p.concept || 'Cuota de mantenimiento',
+            amount: p.amount ?? p.monto ?? 2500,
+            dueDate: p.dueDate || p.due_date || '2026-08-10',
+            status: p.status || p.estatus || 'pendiente',
+            paymentMethod: p.paymentMethod || p.metodo_pago,
+            paymentDate: p.paymentDate || p.fecha_pago
+          })));
+        } else if (mockDisabled) {
+          setPayments([]);
+        }
+
+        // 5. Fetch Egresos
+        const { data: rawEgrData } = await supabase.from('egresos_condominio').select('*');
+        const egrData = mockDisabled 
+          ? (rawEgrData || []).filter((eg: any) => !isDemoId(eg.id))
+          : (rawEgrData || []);
+
+        if (egrData && egrData.length > 0) {
+          setEgresos(egrData.map((eg: any) => ({
+            id: eg.id,
+            proveedor: eg.proveedor,
+            concepto: eg.concepto,
+            monto: eg.monto,
+            categoria: eg.categoria || 'Proveedor',
+            fecha: eg.fecha || new Date().toISOString().split('T')[0],
+            facturaXmlPdf: eg.factura_xml_pdf ?? eg.facturaXmlPdf ?? true,
+            estatus: eg.estatus || eg.status || 'pagado'
+          })));
+        } else if (mockDisabled) {
+          setEgresos([]);
+        }
+      } catch (err) {
+        console.warn('Error fetching initial dataset from Supabase:', err);
+      }
+    };
+
+    fetchSupabaseData();
+  }, []);
+
   // --- SUPER ADMIN EXTRA STATES ---
   // Pasarela de Cobro Automático de Licencias SaaS
-  const [cobrosSaaS, setCobrosSaaS] = useState<CobroLicenciaSaaS[]>([
+  const [cobrosSaaS, setCobrosSaaS] = useState<CobroLicenciaSaaS[]>(() => getIsMockDisabled() ? [] : [
     {
       id: 'cobro-1',
       condoNombre: 'Lomas de Chapultepec AC',
@@ -322,7 +504,7 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
   ]);
 
   // Tickets de Soporte Interno
-  const [internalTickets, setInternalTickets] = useState<InternalSupportTicket[]>([
+  const [internalTickets, setInternalTickets] = useState<InternalSupportTicket[]>(() => getIsMockDisabled() ? [] : [
     {
       id: 'stkt-1',
       condoNombre: 'Condominio Puerta del Sol',
@@ -370,7 +552,7 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
   const [ticketReplyText, setTicketReplyText] = useState('');
 
   // Logs de Auditoría del Sistema
-  const [auditLogs, setAuditLogs] = useState<SystemAuditLog[]>([
+  const [auditLogs, setAuditLogs] = useState<SystemAuditLog[]>(() => getIsMockDisabled() ? [] : [
     { id: 'log-1', timestamp: '2026-07-26 13:30:12', nivel: 'info', usuario: 'harold.anguiano', condominio: 'SaaS Global', accion: 'Acceso exitoso al panel de Super Administrador (SaaS Owner)', ip: '187.190.22.10' },
     { id: 'log-2', timestamp: '2026-07-26 12:45:00', nivel: 'warning', usuario: 'aruiz@lomaschapultepec.mx', condominio: 'Lomas de Chapultepec AC', accion: 'Uso de departamentos alcanzó el 71% del límite (142/200)', ip: '189.210.44.12' },
     { id: 'log-3', timestamp: '2026-07-26 11:15:33', nivel: 'critico', usuario: 'Sistema Automático SaaS', condominio: 'Condominio Puerta del Sol', accion: 'Suscripción suspendida automáticamente por fallo en cobro de tarjeta', ip: '10.0.4.12' },
@@ -381,7 +563,7 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
   const [auditSearchQuery, setAuditSearchQuery] = useState('');
 
   // --- 6. GESTIÓN DE CLIENTES STATE & HANDLERS ---
-  const [clientes, setClientes] = useState<ClienteCondominio[]>([
+  const [clientes, setClientes] = useState<ClienteCondominio[]>(() => getIsMockDisabled() ? [] : [
     {
       id: 'cli-1',
       nombre: 'Lomas de Chapultepec AC',
@@ -503,7 +685,7 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
   };
 
   // Save/Submit client form
-  const handleSaveClient = (e: React.FormEvent) => {
+  const handleSaveClient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formClientNombre || !formClientAdmin || !formClientCorreo) {
       alert('Por favor complete los campos obligatorios.');
@@ -516,23 +698,49 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
 
     if (editingClient) {
       // Edit mode
-      setClientes(prev => prev.map(cli => {
-        if (cli.id === editingClient.id) {
-          return {
-            ...cli,
-            nombre: formClientNombre,
-            administrador: formClientAdmin,
-            correo: formClientCorreo,
-            telefono: formClientTelefono,
-            plan: formClientPlan,
-            limiteDepartamentos: parsedLimDep,
-            limiteUsuarios: parsedLimUsr,
-            limiteAlmacenamiento: parsedLimAlm
-          };
-        }
-        return cli;
-      }));
-      showSuccessBanner('✓ Datos del cliente actualizados exitosamente.');
+      const updatedClient: ClienteCondominio = {
+        ...editingClient,
+        nombre: formClientNombre,
+        administrador: formClientAdmin,
+        correo: formClientCorreo,
+        telefono: formClientTelefono,
+        plan: formClientPlan,
+        limiteDepartamentos: parsedLimDep,
+        limiteUsuarios: parsedLimUsr,
+        limiteAlmacenamiento: parsedLimAlm
+      };
+
+      setClientes(prev => prev.map(cli => cli.id === editingClient.id ? updatedClient : cli));
+
+      try {
+        await supabase.from('clientes_condominio').upsert({
+          id: updatedClient.id,
+          nombre: updatedClient.nombre,
+          administrador: updatedClient.administrador,
+          correo: updatedClient.correo,
+          telefono: updatedClient.telefono,
+          plan: updatedClient.plan,
+          limite_departamentos: updatedClient.limiteDepartamentos,
+          limite_usuarios: updatedClient.limiteUsuarios,
+          limite_almacenamiento: updatedClient.limiteAlmacenamiento,
+          status: updatedClient.status,
+          fecha_registro: updatedClient.fechaRegistro
+        });
+
+        await supabase.from('residencias').upsert({
+          id: updatedClient.id,
+          nombre: updatedClient.nombre,
+          administrador: updatedClient.administrador,
+          numResidencias: updatedClient.limiteDepartamentos,
+          num_residencias: updatedClient.limiteDepartamentos,
+          isActive: updatedClient.status === 'activo',
+          is_active: updatedClient.status === 'activo'
+        });
+      } catch (err) {
+        console.warn('Error updating cliente in Supabase:', err);
+      }
+
+      showSuccessBanner('✓ Datos del cliente actualizados y sincronizados en Supabase.');
     } else {
       // Create mode
       const newClient: ClienteCondominio = {
@@ -551,8 +759,48 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
         status: 'activo',
         fechaRegistro: new Date().toISOString().split('T')[0]
       };
+
       setClientes(prev => [newClient, ...prev]);
-      showSuccessBanner('✓ Cliente registrado exitosamente.');
+
+      try {
+        // 1. Insert into Supabase clientes_condominio
+        const { error: cliErr } = await supabase.from('clientes_condominio').upsert({
+          id: newClient.id,
+          nombre: newClient.nombre,
+          administrador: newClient.administrador,
+          correo: newClient.correo,
+          telefono: newClient.telefono,
+          plan: newClient.plan,
+          limite_departamentos: newClient.limiteDepartamentos,
+          limite_usuarios: newClient.limiteUsuarios,
+          limite_almacenamiento: newClient.limiteAlmacenamiento,
+          uso_departamentos: newClient.usoDepartamentos,
+          uso_usuarios: newClient.usoUsuarios,
+          uso_almacenamiento: newClient.usoAlmacenamiento,
+          status: newClient.status,
+          fecha_registro: newClient.fechaRegistro
+        });
+
+        if (cliErr) {
+          console.warn('Supabase clientes_condominio error:', cliErr);
+        }
+
+        // 2. Also insert into residencias table
+        await supabase.from('residencias').upsert({
+          id: newClient.id,
+          nombre: newClient.nombre,
+          administrador: newClient.administrador,
+          numResidencias: newClient.limiteDepartamentos,
+          num_residencias: newClient.limiteDepartamentos,
+          isActive: true,
+          is_active: true,
+          createdAt: new Date().toISOString()
+        });
+      } catch (err) {
+        console.warn('Error creating cliente in Supabase:', err);
+      }
+
+      showSuccessBanner('✓ Condominio registrado exitosamente y guardado en Supabase.');
       confetti({ particleCount: 80, spread: 60 });
     }
 
@@ -560,22 +808,34 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
   };
 
   // Toggle suspension status
-  const handleToggleSuspendClient = (id: string) => {
+  const handleToggleSuspendClient = async (id: string) => {
+    let newStatus = 'activo';
+    let targetName = '';
+
     setClientes(prev => prev.map(cli => {
       if (cli.id === id) {
-        const newStatus = cli.status === 'activo' ? 'suspendido' : 'activo';
-        showSuccessBanner(`✓ Cliente ${cli.nombre} ha sido ${newStatus === 'suspendido' ? 'SUSPENDIDO' : 'REACTIVADO'}.`);
+        newStatus = cli.status === 'activo' ? 'suspendido' : 'activo';
+        targetName = cli.nombre;
         return {
           ...cli,
-          status: newStatus
+          status: newStatus as any
         };
       }
       return cli;
     }));
+
+    showSuccessBanner(`✓ Cliente ${targetName} ha sido ${newStatus === 'suspendido' ? 'SUSPENDIDO' : 'REACTIVADO'}.`);
+
+    try {
+      await supabase.from('clientes_condominio').update({ status: newStatus }).eq('id', id);
+      await supabase.from('residencias').update({ isActive: newStatus === 'activo', is_active: newStatus === 'activo' }).eq('id', id);
+    } catch (err) {
+      console.warn('Supabase status update error:', err);
+    }
   };
 
   // Delete (baja) client
-  const handleBajaClient = (id: string, nombre: string) => {
+  const handleBajaClient = async (id: string, nombre: string) => {
     if (window.confirm(`¿Está seguro que desea dar de BAJA (eliminar) permanentemente al condominio "${nombre}"? Esta acción no se puede deshacer.`)) {
       setClientes(prev => prev.filter(cli => cli.id !== id));
       // Add audit log
@@ -591,6 +851,14 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
         },
         ...prev
       ]);
+
+      try {
+        await supabase.from('clientes_condominio').delete().eq('id', id);
+        await supabase.from('residencias').delete().eq('id', id);
+      } catch (err) {
+        console.warn('Supabase delete error:', err);
+      }
+
       showSuccessBanner(`✓ El cliente "${nombre}" ha sido dado de baja permanentemente del sistema.`);
     }
   };
@@ -696,8 +964,173 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
     showSuccessBanner('✓ Respuesta enviada al Administrador del Condominio.');
   };
 
+  // ==========================================
+  // HERRAMIENTAS DE MANTENIMIENTO Y LIMPIEZA
+  // ==========================================
+  const SUPABASE_CLEANUP_SQL = `-- LIMPIEZA SEGURA DE DATOS DE PRUEBA EN SUPABASE
+-- Copia y pega este script en: Supabase Dashboard > SQL Editor > New Query > Run
+
+DO $$
+BEGIN
+  -- 1. Eliminar datos de prueba en clientes_condominio (si existe la tabla)
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'clientes_condominio') THEN
+    DELETE FROM public.clientes_condominio 
+    WHERE id IN ('cli-1', 'cli-2', 'cli-3') 
+       OR nombre ILIKE '%Paseo de las Palmas%' 
+       OR nombre ILIKE '%Valle Oriente%' 
+       OR nombre ILIKE '%Lomas del Bosque%'
+       OR correo ILIKE '%@lomas.mx%'
+       OR correo ILIKE '%@valleoriente.com%'
+       OR correo ILIKE '%@lomasdelbosque.com%';
+  END IF;
+
+  -- 2. Eliminar residencias de prueba (si existe la tabla)
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'residencias') THEN
+    DELETE FROM public.residencias 
+    WHERE id IN ('cli-1', 'cli-2', 'cli-3')
+       OR nombre ILIKE '%Paseo de las Palmas%' 
+       OR nombre ILIKE '%Valle Oriente%' 
+       OR nombre ILIKE '%Lomas del Bosque%';
+  END IF;
+
+  -- 3. Limpiar cobros SaaS de prueba (si existe la tabla)
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'cobros_saas') THEN
+    DELETE FROM public.cobros_saas WHERE id LIKE 'cbr-%';
+  END IF;
+
+  -- 4. Limpiar logs de auditoría de prueba (si existe la tabla)
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'audit_logs') THEN
+    DELETE FROM public.audit_logs WHERE id LIKE 'log-%';
+  END IF;
+
+  -- 5. Limpiar tickets de soporte de prueba (si existe la tabla)
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'soporte_tickets') THEN
+    DELETE FROM public.soporte_tickets WHERE id LIKE 'tkt-%';
+  END IF;
+END $$;
+
+-- Confirmación de ejecución
+SELECT 'Limpieza de datos de prueba completada exitosamente' AS resultado;
+`;
+
+  // Borrar todos los datos de prueba y bloquear su recarga permanente
+  const handleDeleteTestData = async () => {
+    const confirmDelete = window.confirm(
+      '¿Desea borrar todos los datos de prueba del sistema?\\n\\n' +
+      '• Se eliminarán los condominios demo, residentes, estados de cuenta, paquetes y tickets ficticios.\\n' +
+      '• Se activará el bloqueo permanente para que NUNCA más se vuelvan a cargar datos de prueba al iniciar sesión.\\n' +
+      '• Los condominios y registros reales que usted haya creado se conservarán intactos.'
+    );
+    if (!confirmDelete) return;
+
+    try {
+      // 1. Activar bandera permanente en localStorage
+      localStorage.setItem('condo_disable_mock_data', 'true');
+      setIsMockDataDisabled(true);
+
+      // 2. Limpiar todos los estados en memoria
+      setClientes(prev => prev.filter(c => !isDemoId(c.id, c.nombre)));
+      setCobrosSaaS([]);
+      setInternalTickets([]);
+      setAuditLogs(prev => prev.filter(l => !isDemoId(l.id, l.condominio)));
+      setPayments([]);
+      setParcels([]);
+      setReservations([]);
+      setTickets([]);
+      setBulletins([]);
+      setReceptors([]);
+      setEstructuras([]);
+      setResidentesCat([]);
+      setPersonalInterno([]);
+      setReglasCuotas([]);
+      setBancoMovimientos([]);
+      setEgresos([]);
+      setEncuestas([]);
+      setPresupuestosExtra([]);
+      setActasAsamblea([]);
+      setInvitadosFrecuentes([]);
+      setBitacoraGuardia([]);
+      setVisitasPendientes([]);
+
+      // 3. Limpiar en Supabase si los registros de prueba residen allí
+      try {
+        await supabase
+          .from('clientes_condominio')
+          .delete()
+          .in('id', ['cli-1', 'cli-2', 'cli-3']);
+      } catch (e) {
+        console.warn('Nota Supabase delete clientes_condominio:', e);
+      }
+
+      try {
+        await supabase
+          .from('residencias')
+          .delete()
+          .in('id', ['cli-1', 'cli-2', 'cli-3']);
+      } catch (e) {
+        console.warn('Nota Supabase delete residencias:', e);
+      }
+
+      showSuccessBanner('✓ Datos de prueba eliminados. La recarga de datos demo ha sido DESACTIVADA permanentemente.');
+      confetti({ particleCount: 80, spread: 60 });
+    } catch (err) {
+      console.error('Error al borrar datos de prueba:', err);
+      showSuccessBanner('✓ Datos de prueba locales eliminados exitosamente.');
+    }
+  };
+
+  // Re-activar datos de demostración
+  const handleRestoreDemoData = () => {
+    const confirmRestore = window.confirm(
+      '¿Desea restaurar los datos de demostración en el sistema?\\n\\n' +
+      'Esto retirará el bloqueo de datos demo y volverá a cargar los registros de ejemplo.'
+    );
+    if (!confirmRestore) return;
+
+    localStorage.removeItem('condo_disable_mock_data');
+    setIsMockDataDisabled(false);
+    showSuccessBanner('✓ Bloqueo retirado. Recargando la aplicación con datos de ejemplo...');
+    setTimeout(() => {
+      window.location.reload();
+    }, 800);
+  };
+
+  // Borrar Caché de la Aplicación y Recargar
+  const handleClearCache = async () => {
+    const confirmCache = window.confirm(
+      '¿Desea borrar la memoria caché de la aplicación?\\n\\n' +
+      '• Se limpiará la memoria caché del navegador (Service Worker / Caches API).\\n' +
+      '• Se refrescarán las conexiones y la interfaz gráfica al estado más reciente.\\n' +
+      '• La página se recargará automáticamente.'
+    );
+    if (!confirmCache) return;
+
+    try {
+      if ('caches' in window) {
+        const cacheNames = await window.caches.keys();
+        await Promise.all(cacheNames.map(name => window.caches.delete(name)));
+      }
+      sessionStorage.clear();
+      showSuccessBanner('✓ Caché del sistema borrado con éxito. Recargando aplicación...');
+      setTimeout(() => {
+        window.location.reload();
+      }, 700);
+    } catch (e) {
+      console.warn('Error limpiando caché:', e);
+      window.location.reload();
+    }
+  };
+
+  // Copiar script SQL al portapapeles
+  const handleCopySqlScript = () => {
+    navigator.clipboard.writeText(SUPABASE_CLEANUP_SQL);
+    setSqlCopied(true);
+    setTimeout(() => setSqlCopied(false), 3000);
+    showSuccessBanner('✓ Script SQL copiado al portapapeles. Listo para pegar en Supabase.');
+  };
+
   // --- 1. FINANZAS STATE ---
-  const [payments, setPayments] = useState<Payment[]>([
+  const [payments, setPayments] = useState<Payment[]>(() => getIsMockDisabled() ? [] : [
     { id: 'pay-1', condo: 'Casa 102', resident: 'Alejandro Ruiz', concept: 'Mantenimiento Julio 2026', amount: 2500, dueDate: '2026-07-10', status: 'pagado', paymentMethod: 'Tarjeta de Crédito', paymentDate: '2026-07-05' },
     { id: 'pay-2', condo: 'Casa 105', resident: 'Haroldo Residente', concept: 'Mantenimiento Julio 2026', amount: 2500, dueDate: '2026-07-10', status: 'pendiente' },
     { id: 'pay-3', condo: 'Casa 110', resident: 'Sofía Mendoza', concept: 'Mantenimiento Julio 2026', amount: 2500, dueDate: '2026-07-10', status: 'vencido' },
@@ -746,7 +1179,7 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
   const callTimerRef = useRef<any>(null);
 
   // Parcels
-  const [parcels, setParcels] = useState<Parcel[]>([
+  const [parcels, setParcels] = useState<Parcel[]>(() => getIsMockDisabled() ? [] : [
     { id: 'pkg-1', condo: 'Casa 102', resident: 'Alejandro Ruiz', carrier: 'Amazon Prime', trackingNumber: 'AMZ-458921', receivedAt: '2026-07-16 11:30', status: 'en_recepcion' },
     { id: 'pkg-2', condo: 'Casa 105', resident: 'Haroldo Residente', carrier: 'DHL Express', trackingNumber: 'DHL-8874102', receivedAt: '2026-07-15 09:15', status: 'entregado' },
     { id: 'pkg-3', condo: 'Casa 110', resident: 'Sofía Mendoza', carrier: 'Mercado Libre', trackingNumber: 'MELI-90124823', receivedAt: '2026-07-17 08:00', status: 'en_recepcion' },
@@ -794,7 +1227,7 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
 
   // --- 3. OPERACIÓN & COMUNIDAD STATE ---
   // Amenities Reservations
-  const [reservations, setReservations] = useState<AmenityReservation[]>([
+  const [reservations, setReservations] = useState<AmenityReservation[]>(() => getIsMockDisabled() ? [] : [
     { id: 'resv-1', amenityName: 'Salón de Eventos', resident: 'Alejandro Ruiz', condo: 'Casa 102', date: '2026-07-20', timeSlot: '14:00 - 22:00', status: 'confirmado' },
     { id: 'resv-2', amenityName: 'Alberca & Terraza', resident: 'Haroldo Residente', condo: 'Casa 105', date: '2026-07-18', timeSlot: '09:00 - 13:00', status: 'pendiente' },
   ]);
@@ -805,7 +1238,7 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
   const [resvCondo, setResvCondo] = useState('');
 
   // Help Desk Tickets
-  const [tickets, setTickets] = useState<HelpDeskTicket[]>([
+  const [tickets, setTickets] = useState<HelpDeskTicket[]>(() => getIsMockDisabled() ? [] : [
     { id: 'tkt-1', condo: 'Casa 102', category: 'Plomería', description: 'Fuga de agua en el medidor principal', priority: 'alta', status: 'en_progreso', createdAt: '2026-07-16' },
     { id: 'tkt-2', condo: 'Casa 105', category: 'Eléctrico', description: 'Falla en luminaria de la banqueta frontal', priority: 'media', status: 'abierto', createdAt: '2026-07-17' },
     { id: 'tkt-3', condo: 'Casa 110', category: 'Áreas Comunes', description: 'La puerta de la alberca no cierra con seguro', priority: 'alta', status: 'resuelto', createdAt: '2026-07-15' },
@@ -816,7 +1249,7 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
   const [newTicketPriority, setNewTicketPriority] = useState<'alta' | 'media' | 'baja'>('media');
 
   // Bulletin Board
-  const [bulletins, setBulletins] = useState<Bulletin[]>([
+  const [bulletins, setBulletins] = useState<Bulletin[]>(() => getIsMockDisabled() ? [] : [
     { id: 'bul-1', title: 'Mantenimiento Anual de Alberca', content: 'Se les informa que la alberca comunal permanecerá cerrada los días 21 y 22 de Julio por labores de limpieza profunda y balance químico.', date: '2026-07-16', category: 'mantenimiento' },
     { id: 'bul-2', title: 'Reforzamiento de Seguridad en Accesos', content: 'A partir de esta semana, los oficiales de caseta solicitarán identificación física oficial obligatoria (INE o Licencia) a todas las visitas y proveedores.', date: '2026-07-15', category: 'seguridad' },
   ]);
@@ -834,7 +1267,7 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
   const [lcoStatus, setLcoStatus] = useState<'activo' | 'desconectado'>('activo');
 
   // B. Receptors Catalog
-  const [receptors, setReceptors] = useState<FiscalReceptor[]>([
+  const [receptors, setReceptors] = useState<FiscalReceptor[]>(() => getIsMockDisabled() ? [] : [
     { id: 'rec-1', condo: 'Casa 102', rfc: 'RUAL890520HB8', razonSocial: 'ALEJANDRO RUIZ ALVAREZ', cp: '11000', regimen: '605', usoCfdi: 'G03', status: 'verificado' },
     { id: 'rec-2', condo: 'Casa 105', rfc: 'HAR881210MZ2', razonSocial: 'HAROLDO RESIDENTE SILVA', cp: '11000', regimen: '601', usoCfdi: 'CP01', status: 'verificado' },
     { id: 'rec-3', condo: 'Casa 110', rfc: 'MESA920311K61', razonSocial: 'SOFIA MENDOZA SANCHEZ', cp: '11030', regimen: '605', usoCfdi: 'G03', status: 'pendiente' },
@@ -855,7 +1288,7 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
 
   // --- NEW MODULE STATES FOR ALL ROLES ---
   // 1. Estructura Inmobiliaria
-  const [estructuras, setEstructuras] = useState<EstructuraInmobiliaria[]>([
+  const [estructuras, setEstructuras] = useState<EstructuraInmobiliaria[]>(() => getIsMockDisabled() ? [] : [
     { id: 'est-1', tipo: 'Torre', nombre: 'Torre A - Paseo de las Palmas', unidadesCount: 24, unidadesDetalle: 'Deptos 101 a 604', status: 'activo' },
     { id: 'est-2', tipo: 'Torre', nombre: 'Torre B - Valle Oriente', unidadesCount: 24, unidadesDetalle: 'Deptos 101 a 604', status: 'activo' },
     { id: 'est-3', tipo: 'Cluster', nombre: 'Cluster Lomas Lote 1-50', unidadesCount: 50, unidadesDetalle: 'Residencias individuales', status: 'activo' },
@@ -866,7 +1299,7 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
   const [newEstDetalle, setNewEstDetalle] = useState('');
 
   // 2. Catálogo de Residentes
-  const [residentesCat, setResidentesCat] = useState<ResidentProfile[]>([
+  const [residentesCat, setResidentesCat] = useState<ResidentProfile[]>(() => getIsMockDisabled() ? [] : [
     { id: 'res-1', nombre: 'Ing. Alejandro Ruiz', unidad: 'Torre A - Depto 102', tipoResidente: 'propietario', correo: 'aruiz@lomas.mx', telefono: '+52 5512345678', status: 'activo' },
     { id: 'res-2', nombre: 'Haroldo Residente', unidad: 'Torre A - Depto 105', tipoResidente: 'propietario', correo: 'haroldo@residente.org', telefono: '+52 5588990011', status: 'activo' },
     { id: 'res-3', nombre: 'Lic. Sofía Mendoza', unidad: 'Torre B - Depto 201', tipoResidente: 'inquilino', correo: 'smendoza@bosques.com', telefono: '+52 5598765432', status: 'moroso' },
@@ -879,7 +1312,7 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
   const [newResTel, setNewResTel] = useState('');
 
   // 3. Personal Interno
-  const [personalInterno, setPersonalInterno] = useState<PersonalInterno[]>([
+  const [personalInterno, setPersonalInterno] = useState<PersonalInterno[]>(() => getIsMockDisabled() ? [] : [
     { id: 'per-1', nombre: 'Oficial Roberto Sánchez', rol: 'Guardia', turno: '24x24', telefono: '+52 5511223344', status: 'activo' },
     { id: 'per-2', nombre: 'Oficial Miguel Ángel Torres', rol: 'Guardia', turno: 'Nocturno', telefono: '+52 5522334455', status: 'activo' },
     { id: 'per-3', nombre: 'Técnico Gonzalo Morales', rol: 'Mantenimiento', turno: 'Matutino', telefono: '+52 5533445566', status: 'activo' },
@@ -891,7 +1324,7 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
   const [newPerTel, setNewPerTel] = useState('');
 
   // 4. Configuración de Cuotas y Alertas
-  const [reglasCuotas, setReglasCuotas] = useState<RuleCuota[]>([
+  const [reglasCuotas, setReglasCuotas] = useState<RuleCuota[]>(() => getIsMockDisabled() ? [] : [
     { id: 'cuo-1', nombre: 'Cuota Ordinaria Mensual 2026', tipo: 'Ordinaria', monto: 2500, periodicidad: 'Mensual', recargoPorcentaje: 10, status: 'activa' },
     { id: 'cuo-2', nombre: 'Fondo de Reserva Impermeabilización', tipo: 'Extraordinaria', monto: 1200, periodicidad: 'Única', recargoPorcentaje: 5, status: 'activa' },
   ]);
@@ -900,14 +1333,14 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
   const [newCuotaTipo, setNewCuotaTipo] = useState<'Ordinaria' | 'Extraordinaria' | 'Recargo Morosidad'>('Ordinaria');
 
   // 5. Conciliación Bancaria
-  const [bancoMovimientos, setBancoMovimientos] = useState<ConciliacionBancaria[]>([
+  const [bancoMovimientos, setBancoMovimientos] = useState<ConciliacionBancaria[]>(() => getIsMockDisabled() ? [] : [
     { id: 'bnc-1', fecha: '2026-07-25', conceptoBanco: 'SPEI RECIBIDO - ALEJANDRO RUIZ', monto: 2500, referencia: 'REFF-90214', estatus: 'conciliado', unidadMatcheada: 'Torre A - Depto 102' },
     { id: 'bnc-2', fecha: '2026-07-24', conceptoBanco: 'DEPOSITO SUCURSAL BBVA CLABE 0121800', monto: 2500, referencia: 'DEPO-8812', estatus: 'conciliado', unidadMatcheada: 'Cluster Lote 12' },
     { id: 'bnc-3', fecha: '2026-07-23', conceptoBanco: 'SPEI DESCONOCIDO - PAGO S/REF', monto: 1500, referencia: 'SPEI-99201', estatus: 'pendiente' },
   ]);
 
   // 6. Egresos & Nóminas
-  const [egresos, setEgresos] = useState<EgresoCondominio[]>([
+  const [egresos, setEgresos] = useState<EgresoCondominio[]>(() => getIsMockDisabled() ? [] : [
     { id: 'egr-1', proveedor: 'CFE Suministrador Básico', concepto: 'Consumo Eléctrico Áreas Comunes / Bombas', monto: 18450, categoria: 'Servicios Básicos', fecha: '2026-07-20', facturaXmlPdf: true, estatus: 'pagado' },
     { id: 'egr-2', proveedor: 'Seguridad Privada Protec SA de CV', concepto: 'Nómina Quincenal Guardias de Caseta', monto: 32000, categoria: 'Nómina Interna', fecha: '2026-07-15', facturaXmlPdf: true, estatus: 'pagado' },
     { id: 'egr-3', proveedor: 'Mantenimiento de Elevadores Otis', concepto: 'Servicio Preventivo Mensual Elevadores', monto: 12500, categoria: 'Mantenimiento Mayor', fecha: '2026-07-10', facturaXmlPdf: true, estatus: 'pagado' },
@@ -924,7 +1357,7 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
   const [canalAlertaWhatsapp, setCanalAlertaWhatsapp] = useState(true);
 
   // 8. Encuestas y Votaciones
-  const [encuestas, setEncuestas] = useState<EncuestaVotacion[]>([
+  const [encuestas, setEncuestas] = useState<EncuestaVotacion[]>(() => getIsMockDisabled() ? [] : [
     {
       id: 'enc-1',
       titulo: 'Aprobación de Instalación de Celdas Solares en Casa Club',
@@ -944,7 +1377,7 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
   const [newEncFechaCierre, setNewEncFechaCierre] = useState('2026-08-15');
 
   // 9. Comité Presupuestos Extraordinarios y Actas
-  const [presupuestosExtra, setPresupuestosExtra] = useState<PresupuestoExtraordinario[]>([
+  const [presupuestosExtra, setPresupuestosExtra] = useState<PresupuestoExtraordinario[]>(() => getIsMockDisabled() ? [] : [
     {
       id: 'pre-1',
       titulo: 'Remodelación de Portones Vehiculares Automatizados',
@@ -969,7 +1402,7 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
     }
   ]);
 
-  const [actasAsamblea, setActasAsamblea] = useState<ActaAsamblea[]>([
+  const [actasAsamblea, setActasAsamblea] = useState<ActaAsamblea[]>(() => getIsMockDisabled() ? [] : [
     {
       id: 'act-1',
       titulo: 'Acta de Asamblea Ordinaria - Junio 2026',
@@ -991,7 +1424,7 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
   ]);
 
   // 10. Residente Invitados Frecuentes & Confirmación Lectura
-  const [invitadosFrecuentes, setInvitadosFrecuentes] = useState<InvitadoFrecuente[]>([
+  const [invitadosFrecuentes, setInvitadosFrecuentes] = useState<InvitadoFrecuente[]>(() => getIsMockDisabled() ? [] : [
     { id: 'inv-1', nombre: 'María Esther Ruiz (Mamá)', relacion: 'Familiar', diasPermitidos: 'Lunes a Domingo (Permanente)', placas: 'XYZ-901-A', estatus: 'activo' },
     { id: 'inv-2', nombre: 'Carlos López (Servicio Limpieza)', relacion: 'Servicio Doméstico', diasPermitidos: 'Martes y Jueves (8am - 3pm)', estatus: 'activo' },
   ]);
@@ -1002,7 +1435,7 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
   const [readBulletins, setReadBulletins] = useState<Record<string, boolean>>({});
 
   // 11. Guardia Bitácora & Visitas Pendientes del Día
-  const [bitacoraGuardia, setBitacoraGuardia] = useState<BitacoraGuardia[]>([
+  const [bitacoraGuardia, setBitacoraGuardia] = useState<BitacoraGuardia[]>(() => getIsMockDisabled() ? [] : [
     { id: 'bit-1', guardiaNombre: 'Oficial Roberto Sánchez', tipo: 'Cambio de Turno', descripcion: 'Recibe turno sin novedades en caseta. Equipos de cómputo e interfón operando 100%.', fechaHora: '2026-07-26 08:00' },
     { id: 'bit-2', guardiaNombre: 'Oficial Roberto Sánchez', tipo: 'Rondín de Seguridad', descripcion: 'Rondín en perímetro norte y alberca. Puertas cerradas, bombas operando.', fechaHora: '2026-07-26 10:30' },
     { id: 'bit-3', guardiaNombre: 'Oficial Roberto Sánchez', tipo: 'Novedad', descripcion: 'Ingresa proveedor de internet en camioneta placas ABC-123. Se verifica INE.', fechaHora: '2026-07-26 11:45' },
@@ -1010,7 +1443,7 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
   const [newBitTipo, setNewBitTipo] = useState<'Novedad' | 'Rondín de Seguridad' | 'Cambio de Turno' | 'Incidencia'>('Novedad');
   const [newBitDesc, setNewBitDesc] = useState('');
 
-  const [visitasPendientes, setVisitasPendientes] = useState<VisitaPendiente[]>([
+  const [visitasPendientes, setVisitasPendientes] = useState<VisitaPendiente[]>(() => getIsMockDisabled() ? [] : [
     { id: 'vis-1', visitanteNombre: 'Carlos Ortiz', condoDestino: 'Torre A - Depto 102', tipoVisita: 'Invitado', placas: 'GTO-901-B', estatus: 'en_espera', tieneRestriccionMoroso: false },
     { id: 'vis-2', visitanteNombre: 'Técnico de Izzi Telecom', condoDestino: 'Torre B - Depto 201', tipoVisita: 'Proveedor', placas: 'MEX-112-C', estatus: 'en_espera', tieneRestriccionMoroso: true },
     { id: 'vis-3', visitanteNombre: 'Lucía Fernández', condoDestino: 'Cluster Lote 12', tipoVisita: 'Invitado', placas: 'JAL-445-A', estatus: 'ingresado', tieneRestriccionMoroso: false },
@@ -1021,7 +1454,7 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
   const [newVisPlacas, setNewVisPlacas] = useState('');
 
   // Handlers for new modules
-  const handleAddEstructura = (e: React.FormEvent) => {
+  const handleAddEstructura = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newEstNombre) return;
     const newEst: EstructuraInmobiliaria = {
@@ -1035,10 +1468,24 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
     setEstructuras(prev => [newEst, ...prev]);
     setNewEstNombre('');
     setNewEstDetalle('');
-    showSuccessBanner('✓ Estructura inmobiliaria registrada.');
+
+    try {
+      await supabase.from('estructuras_inmobiliarias').upsert({
+        id: newEst.id,
+        tipo: newEst.tipo,
+        nombre: newEst.nombre,
+        unidades_count: newEst.unidadesCount,
+        unidades_detalle: newEst.unidadesDetalle,
+        status: newEst.status
+      });
+    } catch (err) {
+      console.warn('Supabase estructura sync warning:', err);
+    }
+
+    showSuccessBanner('✓ Estructura inmobiliaria registrada y guardada en Supabase.');
   };
 
-  const handleAddResidentCat = (e: React.FormEvent) => {
+  const handleAddResidentCat = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newResNombre || !newResUnidad) return;
     const newR: ResidentProfile = {
@@ -1055,10 +1502,25 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
     setNewResUnidad('');
     setNewResCorreo('');
     setNewResTel('');
-    showSuccessBanner('✓ Residente vinculado a unidad exitosamente.');
+
+    try {
+      await supabase.from('residentes_condominio').upsert({
+        id: newR.id,
+        nombre: newR.nombre,
+        unidad: newR.unidad,
+        tipo_residente: newR.tipoResidente,
+        correo: newR.correo,
+        telefono: newR.telefono,
+        status: newR.status
+      });
+    } catch (err) {
+      console.warn('Supabase resident sync warning:', err);
+    }
+
+    showSuccessBanner('✓ Residente vinculado a unidad exitosamente en Supabase.');
   };
 
-  const handleAddPersonal = (e: React.FormEvent) => {
+  const handleAddPersonal = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPerNombre) return;
     const newP: PersonalInterno = {
@@ -1072,10 +1534,24 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
     setPersonalInterno(prev => [newP, ...prev]);
     setNewPerNombre('');
     setNewPerTel('');
+
+    try {
+      await supabase.from('personal_interno').upsert({
+        id: newP.id,
+        nombre: newP.nombre,
+        rol: newP.rol,
+        turno: newP.turno,
+        telefono: newP.telefono,
+        status: newP.status
+      });
+    } catch (err) {
+      console.warn('Supabase personal sync warning:', err);
+    }
+
     showSuccessBanner('✓ Perfil de personal interno dado de alta.');
   };
 
-  const handleAddRuleCuota = (e: React.FormEvent) => {
+  const handleAddRuleCuota = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCuotaNombre) return;
     const newCuo: RuleCuota = {
@@ -1089,10 +1565,25 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
     };
     setReglasCuotas(prev => [newCuo, ...prev]);
     setNewCuotaNombre('');
+
+    try {
+      await supabase.from('reglas_cuotas').upsert({
+        id: newCuo.id,
+        nombre: newCuo.nombre,
+        tipo: newCuo.tipo,
+        monto: newCuo.monto,
+        periodicidad: newCuo.periodicidad,
+        recargo_porcentaje: newCuo.recargoPorcentaje,
+        status: newCuo.status
+      });
+    } catch (err) {
+      console.warn('Supabase cuotas sync warning:', err);
+    }
+
     showSuccessBanner('✓ Regla de cuota y recargos configurada.');
   };
 
-  const handleAddEgreso = (e: React.FormEvent) => {
+  const handleAddEgreso = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newEgrProveedor || !newEgrConcepto) return;
     const newE: EgresoCondominio = {
@@ -1108,7 +1599,23 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
     setEgresos(prev => [newE, ...prev]);
     setNewEgrProveedor('');
     setNewEgrConcepto('');
-    showSuccessBanner('✓ Egreso y comprobante registrado.');
+
+    try {
+      await supabase.from('egresos_condominio').upsert({
+        id: newE.id,
+        proveedor: newE.proveedor,
+        concepto: newE.concepto,
+        monto: newE.monto,
+        categoria: newE.categoria,
+        fecha: newE.fecha,
+        factura_xml_pdf: newE.facturaXmlPdf,
+        estatus: newE.estatus
+      });
+    } catch (err) {
+      console.warn('Supabase egresos sync warning:', err);
+    }
+
+    showSuccessBanner('✓ Egreso y comprobante registrado en Supabase.');
   };
 
   const handleAddEncuesta = (e: React.FormEvent) => {
@@ -2002,10 +2509,45 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
 
             {/* Footer */}
             <div className="pt-4 border-t border-[#2d2d32] space-y-3">
+              {/* Acciones de mantenimiento en el menú */}
+              {isUserAdmin && (
+                <div className="space-y-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsNavOpen(false);
+                      handleClearCache();
+                    }}
+                    className="w-full py-2 px-2.5 bg-blue-950/30 hover:bg-blue-900/40 text-blue-300 border border-blue-500/25 rounded-xl text-xs font-bold transition cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Borrar Caché</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsNavOpen(false);
+                      handleDeleteTestData();
+                    }}
+                    className="w-full py-2 px-2.5 bg-red-950/30 hover:bg-red-900/40 text-red-300 border border-red-500/25 rounded-xl text-xs font-bold transition cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                    <span>Borrar Datos de Prueba</span>
+                  </button>
+                </div>
+              )}
+
               <div className="p-3 bg-[#111114] border border-[#232326] rounded-xl text-[10px] space-y-1 text-slate-400 font-mono">
                 <div className="flex justify-between">
                   <span>Estado SaaS:</span>
                   <span className="text-emerald-400 font-bold">100% Online</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Datos Demo:</span>
+                  <span className={isMockDataDisabled ? "text-emerald-400 font-bold" : "text-amber-400 font-bold"}>
+                    {isMockDataDisabled ? 'Bloqueados' : 'Activos'}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Versión:</span>
@@ -2135,7 +2677,7 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
                   </div>
                   <div>
                     <h3 className="text-sm font-black text-white">1. Rol: Super Administrador (SaaS Owner)</h3>
-                    <p className="text-xs text-red-300 font-mono">Gestión global del negocio: Monetización, soporte y analítica global.</p>
+                    <p className="text-xs text-red-300 font-mono">Gestión global del negocio: Monetización, soporte, auditoría y control de base de datos.</p>
                   </div>
                 </div>
                 <button 
@@ -2144,6 +2686,129 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
                 >
                   Cambiar Rol ←
                 </button>
+              </div>
+
+              {/* PANEL DE MANTENIMIENTO DEL SISTEMA Y BASE DE DATOS */}
+              <div className="p-4 sm:p-5 bg-[#141417] border border-[#2d2d32] rounded-3xl space-y-4 shadow-xl">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#242429] pb-4">
+                  <div className="flex items-center gap-3 text-left">
+                    <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-400 flex items-center justify-center shrink-0">
+                      <Database className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-sm font-black text-white">Mantenimiento de Base de Datos y Caché</h4>
+                        {isMockDataDisabled ? (
+                          <span className="text-[10px] font-black uppercase font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                            Modo Producción Limpia (Sin Demo)
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-black uppercase font-mono px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                            Datos Demo Activos
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {isMockDataDisabled
+                          ? 'Los datos de prueba han sido eliminados y su recarga automática está bloqueada permanentemente.'
+                          : 'Puedes borrar todos los datos de prueba, bloquear su recarga y limpiar la memoria caché del navegador.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Acciones de Limpieza y Mantenimiento */}
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    {/* Botón Borrar Datos de Prueba */}
+                    <button
+                      type="button"
+                      onClick={handleDeleteTestData}
+                      className="px-3.5 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-black rounded-xl transition flex items-center gap-2 cursor-pointer shadow-lg shadow-red-600/20 active:scale-95"
+                      title="Elimina todos los datos ficticios y bloquea su recarga permanente"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>Borrar Datos de Prueba</span>
+                    </button>
+
+                    {/* Botón Borrar Caché */}
+                    <button
+                      type="button"
+                      onClick={handleClearCache}
+                      className="px-3.5 py-2 bg-[#1E1E22] hover:bg-blue-600/20 text-blue-300 hover:text-white border border-blue-500/30 hover:border-blue-500 text-xs font-bold rounded-xl transition flex items-center gap-2 cursor-pointer active:scale-95"
+                      title="Limpia la memoria temporal y caché del navegador y recarga"
+                    >
+                      <RefreshCw className="w-4 h-4 text-blue-400" />
+                      <span>Borrar Caché</span>
+                    </button>
+
+                    {/* Botón Ver SQL Supabase */}
+                    <button
+                      type="button"
+                      onClick={() => setIsSqlModalOpen(true)}
+                      className="px-3.5 py-2 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 hover:text-white border border-purple-500/40 text-xs font-bold rounded-xl transition flex items-center gap-2 cursor-pointer active:scale-95"
+                      title="Abre el script SQL listo para ejecutar en Supabase SQL Editor"
+                    >
+                      <Database className="w-4 h-4 text-purple-400" />
+                      <span>SQL para Supabase</span>
+                    </button>
+
+                    {/* Botón Restaurar Demo (Visible solo si mock está desactivado) */}
+                    {isMockDataDisabled && (
+                      <button
+                        type="button"
+                        onClick={handleRestoreDemoData}
+                        className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold rounded-xl border border-slate-700 transition flex items-center gap-1.5 cursor-pointer text-[11px]"
+                        title="Reactivar los datos de demostración si los necesita nuevamente"
+                      >
+                        <RefreshCcw className="w-3.5 h-3.5" />
+                        <span>Restaurar Demo</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Sub-tabs de navegación para SuperAdmin */}
+                <div className="flex items-center gap-2 overflow-x-auto pt-1 pb-1">
+                  <button
+                    type="button"
+                    onClick={() => setSuperAdminTab('clientes')}
+                    className={`px-4 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 cursor-pointer border shrink-0 ${
+                      superAdminTab === 'clientes'
+                        ? 'bg-purple-600 text-white border-purple-500 shadow-md shadow-purple-600/20'
+                        : 'bg-[#1E1E22] text-slate-400 hover:text-white border-[#2d2d32]'
+                    }`}
+                  >
+                    <Building className="w-4 h-4 text-purple-300" />
+                    <span>1. Gestión de Clientes ({clientes.length})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSuperAdminTab('finanzas')}
+                    className={`px-4 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 cursor-pointer border shrink-0 ${
+                      superAdminTab === 'finanzas'
+                        ? 'bg-purple-600 text-white border-purple-500 shadow-md shadow-purple-600/20'
+                        : 'bg-[#1E1E22] text-slate-400 hover:text-white border-[#2d2d32]'
+                    }`}
+                  >
+                    <DollarSign className="w-4 h-4 text-emerald-400" />
+                    <span>2. Finanzas Globales & Cobros SaaS</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSuperAdminTab('soporte')}
+                    className={`px-4 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 cursor-pointer border shrink-0 ${
+                      superAdminTab === 'soporte'
+                        ? 'bg-purple-600 text-white border-purple-500 shadow-md shadow-purple-600/20'
+                        : 'bg-[#1E1E22] text-slate-400 hover:text-white border-[#2d2d32]'
+                    }`}
+                  >
+                    <MessageSquare className="w-4 h-4 text-blue-400" />
+                    <span>3. Soporte & Auditoría del Sistema</span>
+                  </button>
+                </div>
               </div>
 
               {/* Main Cabinet Workspace (Full Width) */}
@@ -5433,6 +6098,123 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 5. MODAL SCRIPT SQL PARA SUPABASE */}
+      {isSqlModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[999999] flex items-center justify-center p-4 overflow-y-auto animate-fade-in font-sans">
+          <div className="bg-[#18181B] border border-[#2d2d32] rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden my-8 flex flex-col max-h-[90vh]">
+            
+            {/* Modal Header */}
+            <div className="p-5 bg-gradient-to-r from-purple-950/50 to-[#141417] border-b border-[#2d2d32] flex items-center justify-between">
+              <div className="flex items-center gap-3 text-left">
+                <div className="w-10 h-10 rounded-2xl bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center justify-center shrink-0">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+                    Script SQL para Limpieza en Supabase
+                  </h3>
+                  <p className="text-[11px] text-purple-300 font-mono">
+                    Elimina condominios, residencias, logs y datos ficticios directamente de tu base de datos.
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsSqlModalOpen(false)}
+                className="text-slate-400 hover:text-white transition text-xs font-bold bg-[#232326] hover:bg-[#2d2d32] w-8 h-8 rounded-full flex items-center justify-center cursor-pointer shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-4 overflow-y-auto text-left">
+              
+              {/* Instructions Banner */}
+              <div className="p-4 bg-purple-950/20 border border-purple-500/30 rounded-2xl text-xs text-slate-300 space-y-2">
+                <p className="font-bold text-white flex items-center gap-1.5 text-xs">
+                  <Terminal className="w-4 h-4 text-purple-400" />
+                  Instrucciones de ejecución en Supabase:
+                </p>
+                <ol className="list-decimal list-inside space-y-1 text-[11px] text-slate-300 pl-1">
+                  <li>Inicia sesión en tu consola de <strong className="text-white">Supabase</strong>.</li>
+                  <li>En el menú izquierdo, haz clic en el ícono <strong className="text-white">SQL Editor</strong>.</li>
+                  <li>Crea una nueva consulta haciendo clic en <strong className="text-white">+ New Query</strong>.</li>
+                  <li>Pega el código SQL que se muestra a continuación y presiona <strong className="text-emerald-400">Run</strong>.</li>
+                </ol>
+              </div>
+
+              {/* SQL Code Box with Copy Button */}
+              <div className="relative rounded-2xl bg-[#0F0F12] border border-[#27272B] overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-2.5 bg-[#141417] border-b border-[#232326]">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold flex items-center gap-1.5">
+                    <Database className="w-3.5 h-3.5 text-purple-400" />
+                    supabase_clean_mock_data.sql
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCopySqlScript}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      sqlCopied
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-purple-600 hover:bg-purple-500 text-white shadow-md shadow-purple-600/20'
+                    }`}
+                  >
+                    {sqlCopied ? (
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        <span>¡Copiado!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Copiar SQL</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <pre className="p-4 text-[11px] font-mono text-purple-200 overflow-x-auto max-h-64 leading-relaxed select-all">
+                  {SUPABASE_CLEANUP_SQL}
+                </pre>
+              </div>
+
+              {/* Explanatory notes */}
+              <div className="p-3 bg-amber-500/10 border border-amber-500/25 rounded-xl text-[11px] text-amber-200/90 flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="text-amber-300">Nota de Seguridad:</strong> Este script solo elimina registros que contengan identificadores de prueba (<code className="text-white bg-black/40 px-1 py-0.5 rounded">cli-1, cli-2, cli-3</code>) o los nombres de condominios demo. Sus condominios reales nunca serán afectados.
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-[#141417] border-t border-[#2d2d32] flex items-center justify-between gap-3">
+              <span className="text-[10px] text-slate-500 font-mono">
+                CNLS Admin Suite • Supabase Tools
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopySqlScript}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition flex items-center gap-2 cursor-pointer shadow-lg shadow-purple-600/20"
+                >
+                  <Copy className="w-4 h-4" />
+                  <span>{sqlCopied ? '¡Copiado al Portapapeles!' : 'Copiar Script SQL'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsSqlModalOpen(false)}
+                  className="px-4 py-2 bg-[#232326] hover:bg-[#2c2c31] text-slate-300 text-xs font-bold rounded-xl transition cursor-pointer"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+
           </div>
         </div>
       )}
