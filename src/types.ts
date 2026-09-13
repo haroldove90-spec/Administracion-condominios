@@ -186,3 +186,52 @@ export interface Evidencia {
   tipo?: string;
 }
 
+export interface InfraccionMulta {
+  id: string;
+  folio: string;
+  unidad: string;
+  condo?: string;
+  residente: string;
+  categoria: string;
+  monto: number;
+  descripcion: string;
+  evidenciaUrl?: string;
+  fecha: string;
+  estatus: 'pendiente' | 'pagada' | 'en_aclaracion' | 'condonada' | 'apelada' | 'cancelada';
+  cargadaAEstadoCuenta?: boolean;
+  cargadaEnEstadoCuenta?: boolean;
+}
+
+export interface VehiculoCondominio {
+  id: string;
+  unidad: string;
+  condo?: string;
+  propietario: string;
+  placas: string;
+  marcaModelo: string;
+  color: string;
+  cajonAsignado: string;
+  tipoCajon: 'privado' | 'visita' | 'discapacidad';
+  tagRfid?: string;
+  estatus: 'autorizado' | 'bloqueado';
+  status?: 'autorizado' | 'bloqueado';
+  fechaRegistro?: string;
+}
+
+export interface MascotaCondominio {
+  id: string;
+  nombre: string;
+  tipo: 'perro' | 'gato' | 'otro';
+  raza: string;
+  color?: string;
+  unidad: string;
+  condo?: string;
+  dueno: string;
+  vacunaAntirrabica: 'al_dia' | 'vencida' | 'pendiente';
+  estatusVacunacion?: 'al_dia' | 'vencida' | 'pendiente';
+  fechaUltimaVacuna?: string;
+  numeroChip?: string;
+  fotoUrl?: string;
+  observaciones?: string;
+}
+

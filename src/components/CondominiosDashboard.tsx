@@ -7,12 +7,16 @@ import {
   LogOut, Plus, Search, Filter, Lock, Unlock, Home, Crown, Building2, UserCheck, Smartphone, BadgeCheck,
   CheckCircle2, PackageCheck, Terminal, HelpCircle, LifeBuoy, PieChart, ShieldAlert, FileSpreadsheet, RefreshCcw, Layers,
   Server, UserX, Menu, X, FileCheck, Wrench, Vote, CheckSquare, Database, Copy, Sparkles,
-  BookOpen, Landmark, CheckCheck, ArrowLeftRight, Download
+  BookOpen, Landmark, CheckCheck, ArrowLeftRight, Download, Scale, Car, Heart, Gavel, Printer
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { supabase } from '../supabase';
 import { dbService } from '../services/dbService';
 import { ManualUsuario } from './ManualUsuario';
+import { InfraccionMulta, VehiculoCondominio, MascotaCondominio } from '../types';
+import { InfraccionesMultasManager } from './InfraccionesMultasManager';
+import { VehiculosMascotasManager } from './VehiculosMascotasManager';
+import { ReporteFinancieroAsamblea } from './ReporteFinancieroAsamblea';
 
 interface Payment {
   id: string;
@@ -278,7 +282,8 @@ interface CondominiosDashboardProps {
 export default function CondominiosDashboard({ currentUser, onSignOut, initialSubSection }: CondominiosDashboardProps) {
   // Navigation
   const [activeSubSection, setActiveSubSection] = useState<'inicio' | 'superadmin' | 'admininmobiliaria' | 'comite' | 'residente' | 'guardia'>(initialSubSection || 'inicio');
-  const [adminCondoTab, setAdminCondoTab] = useState<'comunidad' | 'finanzas' | 'conciliacion' | 'facturacion' | 'operacion' | 'comunicacion' | 'manual'>('comunidad');
+  const [adminCondoTab, setAdminCondoTab] = useState<'comunidad' | 'finanzas' | 'conciliacion' | 'facturacion' | 'operacion' | 'comunicacion' | 'multas' | 'vehiculos' | 'asamblea' | 'manual'>('comunidad');
+  const [isReporteAsambleaOpen, setIsReporteAsambleaOpen] = useState<boolean>(false);
   const [comiteTab, setComiteTab] = useState<'auditoria' | 'aprobaciones' | 'actas'>('auditoria');
   const [residenteTab, setResidenteTab] = useState<'finanzas' | 'accesos' | 'amenidades' | 'comunicacion'>('finanzas');
   const [guardiaTab, setGuardiaTab] = useState<'accesos' | 'paqueteria' | 'bitacora'>('accesos');
@@ -449,6 +454,87 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
           })));
         } else if (mockDisabled) {
           setEgresos([]);
+        }
+
+        // 6. Fetch Multas / Infracciones
+        try {
+          const { data: rawMultas } = await supabase.from('multas').select('*');
+          const multasData = mockDisabled
+            ? (rawMultas || []).filter((m: any) => !isDemoId(m.id))
+            : (rawMultas || []);
+          if (multasData && multasData.length > 0) {
+            setInfracciones(multasData.map((m: any) => ({
+              id: m.id,
+              condo: m.condo || m.unidad || '',
+              residente: m.residente || '',
+              categoria: m.categoria || 'Otra infracción',
+              monto: Number(m.monto || 0),
+              fecha: m.fecha || new Date().toISOString().split('T')[0],
+              descripcion: m.descripcion || '',
+              evidenciaUrl: m.evidencia_url || m.evidenciaUrl,
+              estatus: m.estatus || 'pendiente',
+              folio: m.folio || `MULTA-${m.id}`,
+              cargadaEnEstadoCuenta: m.cargada_en_estado_cuenta ?? m.cargadaEnEstadoCuenta ?? false
+            })));
+          } else if (mockDisabled) {
+            setInfracciones([]);
+          }
+        } catch (e) {
+          // Table might not exist yet if script not run
+        }
+
+        // 7. Fetch Vehículos
+        try {
+          const { data: rawVeh } = await supabase.from('vehiculos').select('*');
+          const vehData = mockDisabled
+            ? (rawVeh || []).filter((v: any) => !isDemoId(v.id))
+            : (rawVeh || []);
+          if (vehData && vehData.length > 0) {
+            setVehiculos(vehData.map((v: any) => ({
+              id: v.id,
+              condo: v.condo || v.unidad || '',
+              propietario: v.propietario || '',
+              placas: v.placas || '',
+              marcaModelo: v.marca_modelo || v.marcaModelo || '',
+              color: v.color || '',
+              cajonAsignado: v.cajon_asignado || v.cajonAsignado || '',
+              tipoCajon: v.tipo_cajon || v.tipoCajon || 'privado',
+              tagRfid: v.tag_rfid || v.tagRfid,
+              status: v.status || 'autorizado',
+              fechaRegistro: v.fecha_registro || v.fechaRegistro || new Date().toISOString().split('T')[0]
+            })));
+          } else if (mockDisabled) {
+            setVehiculos([]);
+          }
+        } catch (e) {
+          // Table might not exist yet
+        }
+
+        // 8. Fetch Mascotas
+        try {
+          const { data: rawMas } = await supabase.from('mascotas').select('*');
+          const masData = mockDisabled
+            ? (rawMas || []).filter((m: any) => !isDemoId(m.id))
+            : (rawMas || []);
+          if (masData && masData.length > 0) {
+            setMascotas(masData.map((m: any) => ({
+              id: m.id,
+              condo: m.condo || m.unidad || '',
+              dueno: m.dueno || '',
+              nombre: m.nombre || '',
+              tipo: m.tipo || 'perro',
+              raza: m.raza || '',
+              color: m.color || '',
+              estatusVacunacion: m.estatus_vacunacion || m.estatusVacunacion || 'al_dia',
+              fechaUltimaVacuna: m.fecha_ultima_vacuna || m.fechaUltimaVacuna,
+              numeroChip: m.numero_chip || m.numeroChip,
+              observaciones: m.observaciones || ''
+            })));
+          } else if (mockDisabled) {
+            setMascotas([]);
+          }
+        } catch (e) {
+          // Table might not exist yet
         }
       } catch (err) {
         console.warn('Error fetching initial dataset from Supabase:', err);
@@ -1045,6 +1131,21 @@ BEGIN
   IF to_regclass('public.soporte_tickets') IS NOT NULL THEN
     EXECUTE 'DELETE FROM public.soporte_tickets WHERE id::text LIKE ''tkt-%''';
   END IF;
+
+  -- 11. Multas e Infracciones Demo
+  IF to_regclass('public.multas') IS NOT NULL THEN
+    EXECUTE 'DELETE FROM public.multas WHERE id::text LIKE ''inf-%''';
+  END IF;
+
+  -- 12. Vehículos y Estacionamiento Demo
+  IF to_regclass('public.vehiculos') IS NOT NULL THEN
+    EXECUTE 'DELETE FROM public.vehiculos WHERE id::text LIKE ''veh-%''';
+  END IF;
+
+  -- 13. Mascotas Condominales Demo
+  IF to_regclass('public.mascotas') IS NOT NULL THEN
+    EXECUTE 'DELETE FROM public.mascotas WHERE id::text LIKE ''mas-%''';
+  END IF;
 END $$;
 
 -- Confirmación de ejecución exitosa
@@ -1089,6 +1190,9 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
       setInvitadosFrecuentes([]);
       setBitacoraGuardia([]);
       setVisitasPendientes([]);
+      setInfracciones([]);
+      setVehiculos([]);
+      setMascotas([]);
 
       // 3. Limpiar en Supabase si los registros de prueba residen allí
       try {
@@ -1502,6 +1606,289 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
   const [newVisNombre, setNewVisNombre] = useState('');
   const [newVisDestino, setNewVisDestino] = useState('');
   const [newVisPlacas, setNewVisPlacas] = useState('');
+
+  // 12. Infracciones & Multas State
+  const [infracciones, setInfracciones] = useState<InfraccionMulta[]>(() => getIsMockDisabled() ? [] : [
+    {
+      id: 'inf-1',
+      condo: 'Torre A - Depto 102',
+      residente: 'Ing. Alejandro Ruiz',
+      categoria: 'Ruido excesivo / Fiestas fuera de horario',
+      monto: 1500,
+      fecha: '2026-07-20',
+      descripcion: 'Música en volumen alto y alteración del orden después de las 02:00 hrs.',
+      estatus: 'pendiente',
+      folio: 'MULTA-2026-001',
+      cargadaEnEstadoCuenta: false
+    },
+    {
+      id: 'inf-2',
+      condo: 'Torre B - Depto 201',
+      residente: 'Lic. Sofía Mendoza',
+      categoria: 'Invasión de cajón de estacionamiento ajeno',
+      monto: 1200,
+      fecha: '2026-07-18',
+      descripcion: 'Vehículo estacionado en cajón asignado a Depto 202 sin autorización previa.',
+      estatus: 'pagada',
+      folio: 'MULTA-2026-002',
+      cargadaEnEstadoCuenta: true
+    }
+  ]);
+
+  // 13. Vehículos & Estacionamiento State
+  const [vehiculos, setVehiculos] = useState<VehiculoCondominio[]>(() => getIsMockDisabled() ? [] : [
+    {
+      id: 'veh-1',
+      condo: 'Torre A - Depto 102',
+      propietario: 'Ing. Alejandro Ruiz',
+      placas: 'ABC-123-D',
+      marcaModelo: 'Audi A4 2023',
+      color: 'Gris Grafito',
+      cajonAsignado: 'A-12',
+      tipoCajon: 'privado',
+      tagRfid: 'TAG-99014',
+      status: 'autorizado',
+      fechaRegistro: '2026-07-01'
+    },
+    {
+      id: 'veh-2',
+      condo: 'Torre A - Depto 105',
+      propietario: 'Haroldo Residente',
+      placas: 'JKL-456-M',
+      marcaModelo: 'Mazda CX-5 2024',
+      color: 'Rojo Carmín',
+      cajonAsignado: 'A-15',
+      tipoCajon: 'privado',
+      tagRfid: 'TAG-99015',
+      status: 'autorizado',
+      fechaRegistro: '2026-07-02'
+    },
+    {
+      id: 'veh-3',
+      condo: 'Torre B - Depto 201',
+      propietario: 'Lic. Sofía Mendoza',
+      placas: 'XYZ-789-P',
+      marcaModelo: 'Volkswagen Golf 2022',
+      color: 'Blanco Perla',
+      cajonAsignado: 'B-04',
+      tipoCajon: 'privado',
+      tagRfid: 'TAG-99088',
+      status: 'autorizado',
+      fechaRegistro: '2026-07-03'
+    }
+  ]);
+
+  // 14. Mascotas Condominales State
+  const [mascotas, setMascotas] = useState<MascotaCondominio[]>(() => getIsMockDisabled() ? [] : [
+    {
+      id: 'mas-1',
+      condo: 'Torre A - Depto 102',
+      dueno: 'Ing. Alejandro Ruiz',
+      nombre: 'Max',
+      tipo: 'perro',
+      raza: 'Golden Retriever',
+      color: 'Dorado',
+      estatusVacunacion: 'al_dia',
+      fechaUltimaVacuna: '2026-05-10',
+      numeroChip: 'CHIP-MX-98201',
+      observaciones: 'Porta placa identificadora con teléfono.'
+    },
+    {
+      id: 'mas-2',
+      condo: 'Torre B - Depto 201',
+      dueno: 'Lic. Sofía Mendoza',
+      nombre: 'Luna',
+      tipo: 'gato',
+      raza: 'Siamés',
+      color: 'Beige y café',
+      estatusVacunacion: 'al_dia',
+      fechaUltimaVacuna: '2026-06-15',
+      numeroChip: 'CHIP-MX-44102',
+      observaciones: 'Totalmente hogareña.'
+    }
+  ]);
+
+  // Handlers for Infracciones & Multas
+  const handleAddInfraccion = async (nueva: InfraccionMulta) => {
+    setInfracciones(prev => [nueva, ...prev]);
+    showSuccessBanner(`✓ Infracción ${nueva.folio || nueva.id} registrada exitosamente.`);
+    try {
+      await supabase.from('multas').insert({
+        id: nueva.id,
+        condo: nueva.condo,
+        residente: nueva.residente,
+        categoria: nueva.categoria,
+        monto: nueva.monto,
+        fecha: nueva.fecha,
+        descripcion: nueva.descripcion,
+        evidencia_url: nueva.evidenciaUrl,
+        estatus: nueva.estatus,
+        folio: nueva.folio,
+        cargada_en_estado_cuenta: nueva.cargadaEnEstadoCuenta
+      });
+    } catch (err) {
+      console.warn('Nota Supabase multas insert:', err);
+    }
+  };
+
+  const handleCargarMultaAEstadoCuenta = async (infraccionId: string) => {
+    const inf = infracciones.find(i => i.id === infraccionId);
+    if (!inf) return;
+
+    setInfracciones(prev => prev.map(i => i.id === infraccionId ? { ...i, cargadaEnEstadoCuenta: true } : i));
+
+    const newPayment: Payment = {
+      id: 'pay-inf-' + Date.now(),
+      condo: inf.condo,
+      resident: inf.residente || 'Propietario',
+      concept: `Multa: ${inf.categoria} (Folio ${inf.folio || inf.id})`,
+      amount: inf.monto,
+      dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      status: 'pendiente'
+    };
+
+    setPayments(prev => [newPayment, ...prev]);
+
+    try {
+      await supabase.from('multas').update({ cargada_en_estado_cuenta: true }).eq('id', infraccionId);
+      await supabase.from('pagos_cuotas').insert({
+        id: newPayment.id,
+        condo: newPayment.condo,
+        resident: newPayment.resident,
+        concept: newPayment.concept,
+        amount: newPayment.amount,
+        due_date: newPayment.dueDate,
+        status: newPayment.status
+      });
+    } catch (err) {
+      console.warn('Nota Supabase multas update / pagos insert:', err);
+    }
+
+    showSuccessBanner(`✓ Multa ${inf.folio || inf.id} cargada exitosamente al estado de cuenta de ${inf.condo} por $${inf.monto.toLocaleString('es-MX')}.00`);
+    confetti({ particleCount: 30, spread: 60 });
+  };
+
+  const handleCambiarEstatusInfraccion = async (infraccionId: string, nuevoEstatus: InfraccionMulta['estatus']) => {
+    setInfracciones(prev => prev.map(i => i.id === infraccionId ? { ...i, estatus: nuevoEstatus } : i));
+    try {
+      await supabase.from('multas').update({ estatus: nuevoEstatus }).eq('id', infraccionId);
+    } catch (err) {
+      console.warn('Nota Supabase multas update status:', err);
+    }
+    showSuccessBanner(`✓ Estatus de infracción actualizado a "${nuevoEstatus}".`);
+  };
+
+  const handleEliminarInfraccion = async (infraccionId: string) => {
+    setInfracciones(prev => prev.filter(i => i.id !== infraccionId));
+    try {
+      await supabase.from('multas').delete().eq('id', infraccionId);
+    } catch (err) {
+      console.warn('Nota Supabase multas delete:', err);
+    }
+    showSuccessBanner(`✓ Registro de infracción eliminado.`);
+  };
+
+  // Handlers for Vehículos & Mascotas
+  const handleAddVehiculo = async (nuevo: VehiculoCondominio) => {
+    setVehiculos(prev => [nuevo, ...prev]);
+    showSuccessBanner(`✓ Vehículo con placas ${nuevo.placas} registrado exitosamente.`);
+    try {
+      await supabase.from('vehiculos').insert({
+        id: nuevo.id,
+        condo: nuevo.condo,
+        propietario: nuevo.propietario,
+        placas: nuevo.placas,
+        marca_modelo: nuevo.marcaModelo,
+        color: nuevo.color,
+        cajon_asignado: nuevo.cajonAsignado,
+        tipo_cajon: nuevo.tipoCajon,
+        tag_rfid: nuevo.tagRfid,
+        status: nuevo.status,
+        fecha_registro: nuevo.fechaRegistro
+      });
+    } catch (err) {
+      console.warn('Nota Supabase vehiculos insert:', err);
+    }
+  };
+
+  const handleActualizarVehiculoStatus = async (id: string, nuevoStatus: 'autorizado' | 'bloqueado') => {
+    setVehiculos(prev => prev.map(v => v.id === id ? { ...v, status: nuevoStatus } : v));
+    try {
+      await supabase.from('vehiculos').update({ status: nuevoStatus }).eq('id', id);
+    } catch (err) {
+      console.warn('Nota Supabase vehiculos status update:', err);
+    }
+    showSuccessBanner(`✓ Estatus de vehículo actualizado a "${nuevoStatus}".`);
+  };
+
+  const handleAddMascota = async (nueva: MascotaCondominio) => {
+    setMascotas(prev => [nueva, ...prev]);
+    showSuccessBanner(`✓ Mascota "${nueva.nombre}" registrada exitosamente.`);
+    try {
+      await supabase.from('mascotas').insert({
+        id: nueva.id,
+        condo: nueva.condo,
+        dueno: nueva.dueno,
+        nombre: nueva.nombre,
+        tipo: nueva.tipo,
+        raza: nueva.raza,
+        color: nueva.color,
+        estatus_vacunacion: nueva.estatusVacunacion,
+        fecha_ultima_vacuna: nueva.fechaUltimaVacuna,
+        numero_chip: nueva.numeroChip,
+        observaciones: nueva.observaciones
+      });
+    } catch (err) {
+      console.warn('Nota Supabase mascotas insert:', err);
+    }
+  };
+
+  const handleActualizarVacunaMascota = async (id: string, nuevoStatus: 'al_dia' | 'vencida') => {
+    setMascotas(prev => prev.map(m => m.id === id ? { ...m, estatusVacunacion: nuevoStatus } : m));
+    try {
+      await supabase.from('mascotas').update({ estatus_vacunacion: nuevoStatus }).eq('id', id);
+    } catch (err) {
+      console.warn('Nota Supabase mascotas vacuna update:', err);
+    }
+    showSuccessBanner(`✓ Estatus de vacunación actualizado a "${nuevoStatus}".`);
+  };
+
+  // Computed units list for managers
+  const unidadesList = React.useMemo(() => {
+    const list: { id: string; identificador: string; propietarioNombre: string }[] = [];
+    const seen = new Set<string>();
+
+    residentesCat.forEach(r => {
+      const key = r.unidad.toLowerCase().trim();
+      if (!seen.has(key)) {
+        seen.add(key);
+        list.push({ id: r.id, identificador: r.unidad, propietarioNombre: r.nombre });
+      }
+    });
+
+    payments.forEach(p => {
+      const key = p.condo.toLowerCase().trim();
+      if (!seen.has(key)) {
+        seen.add(key);
+        list.push({ id: p.id, identificador: p.condo, propietarioNombre: p.resident });
+      }
+    });
+
+    return list;
+  }, [residentesCat, payments]);
+
+  const unidadesParaReporte = React.useMemo(() => {
+    return unidadesList.map(u => {
+      const res = residentesCat.find(r => r.unidad.toLowerCase() === u.identificador.toLowerCase());
+      return {
+        id: u.id,
+        identificador: u.identificador,
+        propietarioNombre: u.propietarioNombre,
+        mantenimientoCuota: 2500,
+        estatusMorosidad: (res?.status === 'moroso' ? 'moroso' : 'al_dia') as 'moroso' | 'al_dia'
+      };
+    });
+  }, [unidadesList, residentesCat]);
 
   // Handlers for new modules
   const handleAddEstructura = async (e: React.FormEvent) => {
@@ -4037,6 +4424,41 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
                 <span>6. Comunicación & Votaciones</span>
               </button>
               <button
+                onClick={() => setAdminCondoTab('multas')}
+                className={`px-3.5 py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
+                  adminCondoTab === 'multas'
+                    ? 'bg-purple-600 text-white shadow-lg shadow-purple-950/40'
+                    : 'bg-[#1E1E22] text-amber-300 hover:text-white border border-amber-500/30'
+                }`}
+              >
+                <Scale className="w-3.5 h-3.5 text-amber-400" />
+                <span>7. Infracciones & Multas ⚖️</span>
+                {infracciones.filter(i => i.estatus === 'pendiente').length > 0 && (
+                  <span className="px-1.5 py-0.2 text-[8px] bg-amber-500/20 text-amber-300 font-extrabold rounded-full">
+                    {infracciones.filter(i => i.estatus === 'pendiente').length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setAdminCondoTab('vehiculos')}
+                className={`px-3.5 py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
+                  adminCondoTab === 'vehiculos'
+                    ? 'bg-purple-600 text-white shadow-lg shadow-purple-950/40'
+                    : 'bg-[#1E1E22] text-sky-300 hover:text-white border border-sky-500/30'
+                }`}
+              >
+                <Car className="w-3.5 h-3.5 text-sky-400" />
+                <span>8. Vehículos & Mascotas 🚗🐾</span>
+              </button>
+              <button
+                onClick={() => setIsReporteAsambleaOpen(true)}
+                className="px-3.5 py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 bg-gradient-to-r from-emerald-600/80 to-teal-600/80 hover:from-emerald-500 hover:to-teal-500 text-white border border-emerald-400/30 shadow-lg shadow-emerald-950/30"
+                title="Generar Dossier Financiero e Informe Ejecutivo para Asamblea Ordinaria"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-200" />
+                <span>9. Dossier Asamblea 📑</span>
+              </button>
+              <button
                 onClick={() => setAdminCondoTab('manual')}
                 className={`px-3.5 py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
                   adminCondoTab === 'manual'
@@ -4045,7 +4467,7 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
                 }`}
               >
                 <BookOpen className="w-3.5 h-3.5 text-purple-400" />
-                <span>7. Manual del Usuario 📖</span>
+                <span>10. Manual del Usuario 📖</span>
               </button>
             </div>
 
@@ -5909,6 +6331,67 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
               </div>
             </div>
           )}
+
+          {/* TAB 7: INFRACCIONES & MULTAS */}
+          {adminCondoTab === 'multas' && (
+            <div className="space-y-6 animate-fade-in text-left">
+              <InfraccionesMultasManager
+                infracciones={infracciones}
+                unidades={unidadesList}
+                onAgregarInfraccion={handleAddInfraccion}
+                onCargarAEstadoCuenta={handleCargarMultaAEstadoCuenta}
+                onCambiarEstatus={handleCambiarEstatusInfraccion}
+                onEliminarInfraccion={handleEliminarInfraccion}
+              />
+            </div>
+          )}
+
+          {/* TAB 8: VEHÍCULOS & MASCOTAS */}
+          {adminCondoTab === 'vehiculos' && (
+            <div className="space-y-6 animate-fade-in text-left">
+              <VehiculosMascotasManager
+                vehiculos={vehiculos}
+                mascotas={mascotas}
+                unidades={unidadesList}
+                onAgregarVehiculo={handleAddVehiculo}
+                onAgregarMascota={handleAddMascota}
+                onActualizarVehiculoStatus={handleActualizarVehiculoStatus}
+                onActualizarVacunaMascota={handleActualizarVacunaMascota}
+              />
+            </div>
+          )}
+
+          {/* TAB 9: ASAMBLEA DOSSIER BANNER */}
+          {adminCondoTab === 'asamblea' && (
+            <div className="space-y-6 animate-fade-in text-left">
+              <div className="p-8 bg-[#1E1E22] border border-[#2d2d32] rounded-3xl text-center space-y-4">
+                <div className="w-16 h-16 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto shadow-inner">
+                  <FileSpreadsheet className="w-8 h-8" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-lg font-black text-white">Generador de Dossier Financiero para Asamblea Ordinaria</h3>
+                  <p className="text-xs text-slate-400 max-w-xl mx-auto leading-relaxed">
+                    Genera de forma automatizada el informe ejecutivo de rendición de cuentas para propietarios y comité de vigilancia: balance de ingresos, desglose de egresos, fondo de reserva, morosidad detallada y reporte de infracciones.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsReporteAsambleaOpen(true)}
+                  className="px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs rounded-xl shadow-lg shadow-emerald-950/40 cursor-pointer inline-flex items-center gap-2 transition hover:scale-105"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>Abrir Generador de Dossier Financiero</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 10: MANUAL DEL USUARIO */}
+          {adminCondoTab === 'manual' && (
+            <div className="space-y-6 animate-fade-in text-left">
+              <ManualUsuario />
+            </div>
+          )}
         </div>
       )}
 
@@ -7251,6 +7734,18 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
           </div>
         </div>
       )}
+
+      {/* MODAL: REPORTE FINANCIERO DOSSIER ASAMBLEA */}
+      <ReporteFinancieroAsamblea
+        isOpen={isReporteAsambleaOpen}
+        onClose={() => setIsReporteAsambleaOpen(false)}
+        condominioNombre={clientes[0]?.nombre || 'Condominio Residencial'}
+        administradorNombre={currentUser?.name || 'Administrador del Condominio'}
+        payments={payments}
+        egresos={egresos}
+        unidades={unidadesParaReporte}
+        infracciones={infracciones}
+      />
 
     </div>
   );

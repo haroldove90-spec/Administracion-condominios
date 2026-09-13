@@ -22,7 +22,11 @@ import {
   Package, 
   Building2, 
   CheckCheck, 
-  Download 
+  Download,
+  Car,
+  Scale,
+  Heart,
+  FileSpreadsheet
 } from 'lucide-react';
 
 interface ManualUsuarioProps {
@@ -31,7 +35,7 @@ interface ManualUsuarioProps {
 
 export const ManualUsuario: React.FC<ManualUsuarioProps> = ({ onGoToTab }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeCategory, setActiveCategory] = useState<'all' | 'roles' | 'propiedades' | 'finanzas' | 'conciliacion' | 'amenidades' | 'caseta' | 'comunicacion'>('all');
+  const [activeCategory, setActiveCategory] = useState<'all' | 'roles' | 'propiedades' | 'finanzas' | 'conciliacion' | 'amenidades' | 'caseta' | 'comunicacion' | 'asambleas' | 'infracciones' | 'vehiculos'>('all');
 
   const manualSteps = [
     {
@@ -218,6 +222,87 @@ export const ManualUsuario: React.FC<ManualUsuarioProps> = ({ onGoToTab }) => {
         }
       ],
       tip: 'Utiliza las votaciones electrónicas para medir la aprobación previa de presupuestos extraordinarios antes de convocar a asamblea presencial.'
+    },
+    {
+      id: 'step-8',
+      category: 'asambleas',
+      title: '8. Reporte Financiero Oficial para Asambleas (Dossier PDF)',
+      icon: <FileText className="w-5 h-5 text-purple-400" />,
+      tag: 'Rendición de Cuentas',
+      description: 'Genera el informe ejecutivo imprimible con Estado de Resultados, Semáforo de Morosidad y firmas legales del Comité.',
+      points: [
+        {
+          title: 'Acceso al Generador de Dossier',
+          text: 'En la pestaña "2. Finanzas & Cobranza", haz clic en el botón superior destacado "Generar Dossier Financiero para Asamblea 📑".'
+        },
+        {
+          title: 'Estado de Resultados y Flujo Operativo',
+          text: 'El reporte totaliza automáticamente el presupuesto emitido del mes, los ingresos efectivamente recaudados (con porcentaje de eficacia en cobranza), el total de facturas pagadas a proveedores y el saldo neto disponible en cuentas bancarias.'
+        },
+        {
+          title: 'Semáforo de Morosidad y Antigüedad de Saldos',
+          text: 'Incluye una tabla oficial por unidad con clasificación automática: 🟢 Al corriente (Verde), 🟡 Preventivo con 1 mes adeudado (Amarillo) y 🔴 Crítico con 2 o más meses en mora (Rojo), desglosando la deuda exacta.'
+        },
+        {
+          title: 'Impresión Directa y Exportación',
+          text: 'Presiona "Imprimir / Guardar PDF" para generar un archivo formal con membrete y líneas de firma para el Administrador General, Presidente del Comité y Vocal de Finanzas. También puedes exportar el consolidado a formato CSV para Excel.'
+        }
+      ],
+      tip: 'Genera este informe con 48 horas de anticipación a la asamblea para que el Comité de Vigilancia pueda cotejar las cifras y firmar de visto bueno.'
+    },
+    {
+      id: 'step-9',
+      category: 'infracciones',
+      title: '9. Gestión de Multas e Infracciones al Reglamento',
+      icon: <AlertTriangle className="w-5 h-5 text-amber-400" />,
+      tag: 'Régimen Condominal',
+      description: 'Tipifica sanciones, documenta faltas con evidencia fotográfica y carga las multas directamente al estado de cuenta del infractor.',
+      points: [
+        {
+          title: 'Catálogo de Faltas al Reglamento',
+          text: 'En la pestaña "5. Operación & Amenidades" > subpestaña "Infracciones & Multas ⚖️", dispones de un catálogo predeterminado: ruido fuera de horario, invasión de estacionamiento, heces de mascotas sin recoger, basura en pasillos o daños a áreas comunes con montos sugeridos.'
+        },
+        {
+          title: 'Levantamiento de Falta con Foto',
+          text: 'Haz clic en "Levantar Infracción". Selecciona el departamento o casa infractora (el nombre del residente se auto-completará), la categoría de la falta, el monto de la sanción económica ($MXN), la descripción del hecho y el enlace o foto de evidencia.'
+        },
+        {
+          title: 'Cargar Cargo al Recibo del Departamento',
+          text: 'En la tabla de infracciones, haz clic en "+ Cargar a Recibo". El sistema creará de inmediato una cuota por concepto de multa en el módulo de pagos de esa unidad para que se cobre junto con su cuota de mantenimiento.'
+        },
+        {
+          title: 'Resolución: Cobro o Condonación',
+          text: 'Al liquidarse la multa presiona "Cobrar ✓" para reflejar el ingreso. Si el infractor presenta una apelación aceptada por el Comité, presiona "Condonar" para archivar el folio sin cargo financiero.'
+        }
+      ],
+      tip: 'La evidencia fotográfica es obligatoria para sostener legalmente la sanción en caso de controversia ante la Procuraduría Social o la asamblea.'
+    },
+    {
+      id: 'step-10',
+      category: 'vehiculos',
+      title: '10. Padrón Vehicular, Cajones de Estacionamiento y Mascotas',
+      icon: <Car className="w-5 h-5 text-blue-400" />,
+      tag: 'Censo & Convivencia',
+      description: 'Control de cajones asignados, búsqueda de autos por placas y padrón canino/felino con control de vacunas.',
+      points: [
+        {
+          title: 'Asignación de Cajones y Marbetes RFID',
+          text: 'En "5. Operación & Amenidades" > "Vehículos & Mascotas 🚗", registra los automóviles de los condóminos vinculándolos a su cajón privado (ej. Cajón B-12) y su marbete o Tag RFID para control en caseta.'
+        },
+        {
+          title: 'Buscador Rápido por Placas',
+          text: 'Si un vehículo está mal estacionado o bloqueando una cochera, escribe las placas o número de cajón en el buscador para identificar al instante al departamento responsable y contactar al propietario.'
+        },
+        {
+          title: 'Padrón Canino y Felino de Mascotas',
+          text: 'Accede a la subpestaña "Padrón de Mascotas" para censar perros y gatos por departamento, registrando nombre, raza, foto y estatus de su vacuna antirrábica.'
+        },
+        {
+          title: 'Alerta de Vacunación Vencida',
+          text: 'El sistema emite un semáforo de advertencia roja si la vacuna de una mascota ha caducado, permitiéndote enviar un recordatorio de salud pública al departamento antes de emitir sanciones.'
+        }
+      ],
+      tip: 'Mantén los cajones de visitas limitados a un máximo de horas en el reglamento para evitar que se conviertan en estacionamiento permanente.'
     }
   ];
 
@@ -296,7 +381,10 @@ export const ManualUsuario: React.FC<ManualUsuarioProps> = ({ onGoToTab }) => {
             { id: 'conciliacion', label: '4. Conciliación SPEI' },
             { id: 'amenidades', label: '5. Amenidades' },
             { id: 'caseta', label: '6. Caseta & QR' },
-            { id: 'comunicacion', label: '7. Comunicación' }
+            { id: 'comunicacion', label: '7. Comunicación' },
+            { id: 'asambleas', label: '8. Asambleas' },
+            { id: 'infracciones', label: '9. Multas' },
+            { id: 'vehiculos', label: '10. Vehículos & Mascotas' }
           ].map((cat) => (
             <button
               key={cat.id}
