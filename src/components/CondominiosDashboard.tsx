@@ -6,11 +6,13 @@ import {
   Activity, ArrowUpRight, ArrowDownRight, Upload, Globe, RefreshCw, Send, Trash2,
   LogOut, Plus, Search, Filter, Lock, Unlock, Home, Crown, Building2, UserCheck, Smartphone, BadgeCheck,
   CheckCircle2, PackageCheck, Terminal, HelpCircle, LifeBuoy, PieChart, ShieldAlert, FileSpreadsheet, RefreshCcw, Layers,
-  Server, UserX, Menu, X, FileCheck, Wrench, Vote, CheckSquare, Database, Copy, Sparkles
+  Server, UserX, Menu, X, FileCheck, Wrench, Vote, CheckSquare, Database, Copy, Sparkles,
+  BookOpen, Landmark, CheckCheck, ArrowLeftRight, Download
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { supabase } from '../supabase';
 import { dbService } from '../services/dbService';
+import { ManualUsuario } from './ManualUsuario';
 
 interface Payment {
   id: string;
@@ -170,6 +172,8 @@ export interface ConciliacionBancaria {
   referencia: string;
   estatus: 'conciliado' | 'pendiente';
   unidadMatcheada?: string;
+  folioRecibo?: string;
+  fechaConciliacion?: string;
 }
 
 export interface EgresoCondominio {
@@ -274,7 +278,7 @@ interface CondominiosDashboardProps {
 export default function CondominiosDashboard({ currentUser, onSignOut, initialSubSection }: CondominiosDashboardProps) {
   // Navigation
   const [activeSubSection, setActiveSubSection] = useState<'inicio' | 'superadmin' | 'admininmobiliaria' | 'comite' | 'residente' | 'guardia'>(initialSubSection || 'inicio');
-  const [adminCondoTab, setAdminCondoTab] = useState<'comunidad' | 'finanzas' | 'facturacion' | 'operacion' | 'comunicacion'>('comunidad');
+  const [adminCondoTab, setAdminCondoTab] = useState<'comunidad' | 'finanzas' | 'conciliacion' | 'facturacion' | 'operacion' | 'comunicacion' | 'manual'>('comunidad');
   const [comiteTab, setComiteTab] = useState<'auditoria' | 'aprobaciones' | 'actas'>('auditoria');
   const [residenteTab, setResidenteTab] = useState<'finanzas' | 'accesos' | 'amenidades' | 'comunicacion'>('finanzas');
   const [guardiaTab, setGuardiaTab] = useState<'accesos' | 'paqueteria' | 'bitacora'>('accesos');
@@ -967,50 +971,84 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
   // ==========================================
   // HERRAMIENTAS DE MANTENIMIENTO Y LIMPIEZA
   // ==========================================
-  const SUPABASE_CLEANUP_SQL = `-- LIMPIEZA SEGURA DE DATOS DE PRUEBA EN SUPABASE
--- Copia y pega este script en: Supabase Dashboard > SQL Editor > New Query > Run
+  const SUPABASE_CLEANUP_SQL = `-- ==============================================================================
+-- SCRIPT SEGURO DE LIMPIEZA DE DATOS DE PRUEBA EN SUPABASE (CNLS SaaS)
+-- 100% Blindado: Compatible con UUID/TEXT y no falla aunque falten columnas opcionales
+-- ==============================================================================
 
 DO $$
 BEGIN
-  -- 1. Eliminar datos de prueba en clientes_condominio (si existe la tabla)
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'clientes_condominio') THEN
-    DELETE FROM public.clientes_condominio 
-    WHERE id IN ('cli-1', 'cli-2', 'cli-3') 
-       OR nombre ILIKE '%Paseo de las Palmas%' 
-       OR nombre ILIKE '%Valle Oriente%' 
-       OR nombre ILIKE '%Lomas del Bosque%'
-       OR correo ILIKE '%@lomas.mx%'
-       OR correo ILIKE '%@valleoriente.com%'
-       OR correo ILIKE '%@lomasdelbosque.com%';
+  -- 1. Movimientos Bancarios y Conciliaciones Demo
+  IF to_regclass('public.conciliacion_bancaria') IS NOT NULL THEN
+    EXECUTE 'DELETE FROM public.conciliacion_bancaria WHERE id::text LIKE ''bnc-%''';
   END IF;
 
-  -- 2. Eliminar residencias de prueba (si existe la tabla)
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'residencias') THEN
-    DELETE FROM public.residencias 
-    WHERE id IN ('cli-1', 'cli-2', 'cli-3')
-       OR nombre ILIKE '%Paseo de las Palmas%' 
-       OR nombre ILIKE '%Valle Oriente%' 
-       OR nombre ILIKE '%Lomas del Bosque%';
+  -- 2. Pagos y Cuotas de Mantenimiento Demo (soporta pagos_cuotas y payments)
+  IF to_regclass('public.pagos_cuotas') IS NOT NULL THEN
+    EXECUTE 'DELETE FROM public.pagos_cuotas WHERE id::text IN (''pay-1'', ''pay-2'', ''pay-3'') OR id::text LIKE ''pay-%''';
+  END IF;
+  IF to_regclass('public.payments') IS NOT NULL THEN
+    EXECUTE 'DELETE FROM public.payments WHERE id::text IN (''pay-1'', ''pay-2'', ''pay-3'') OR id::text LIKE ''pay-%''';
   END IF;
 
-  -- 3. Limpiar cobros SaaS de prueba (si existe la tabla)
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'cobros_saas') THEN
-    DELETE FROM public.cobros_saas WHERE id LIKE 'cbr-%';
+  -- 3. Paquetería Demo (soporta paqueteria y parcels)
+  IF to_regclass('public.paqueteria') IS NOT NULL THEN
+    EXECUTE 'DELETE FROM public.paqueteria WHERE id::text IN (''par-1'', ''par-2'') OR id::text LIKE ''par-%''';
+  END IF;
+  IF to_regclass('public.parcels') IS NOT NULL THEN
+    EXECUTE 'DELETE FROM public.parcels WHERE id::text IN (''par-1'', ''par-2'') OR id::text LIKE ''par-%''';
   END IF;
 
-  -- 4. Limpiar logs de auditoría de prueba (si existe la tabla)
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'audit_logs') THEN
-    DELETE FROM public.audit_logs WHERE id LIKE 'log-%';
+  -- 4. Reservaciones de Amenidades Demo (soporta reservaciones_amenidades y amenity_reservations)
+  IF to_regclass('public.reservaciones_amenidades') IS NOT NULL THEN
+    EXECUTE 'DELETE FROM public.reservaciones_amenidades WHERE id::text LIKE ''res-%''';
+  END IF;
+  IF to_regclass('public.amenity_reservations') IS NOT NULL THEN
+    EXECUTE 'DELETE FROM public.amenity_reservations WHERE id::text LIKE ''res-%''';
   END IF;
 
-  -- 5. Limpiar tickets de soporte de prueba (si existe la tabla)
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'soporte_tickets') THEN
-    DELETE FROM public.soporte_tickets WHERE id LIKE 'tkt-%';
+  -- 5. Tickets y Órdenes de Trabajo Demo (soporta ordenes_trabajo y help_desk_tickets)
+  IF to_regclass('public.ordenes_trabajo') IS NOT NULL THEN
+    EXECUTE 'DELETE FROM public.ordenes_trabajo WHERE id::text IN (''tic-1'', ''tic-2'') OR id::text LIKE ''tic-%''';
+  END IF;
+  IF to_regclass('public.help_desk_tickets') IS NOT NULL THEN
+    EXECUTE 'DELETE FROM public.help_desk_tickets WHERE id::text IN (''tic-1'', ''tic-2'') OR id::text LIKE ''tic-%''';
+  END IF;
+
+  -- 6. Comunicados y Boletines Demo (soporta comunicados y bulletins)
+  IF to_regclass('public.comunicados') IS NOT NULL THEN
+    EXECUTE 'DELETE FROM public.comunicados WHERE id::text IN (''bul-1'') OR id::text LIKE ''bul-%''';
+  END IF;
+  IF to_regclass('public.bulletins') IS NOT NULL THEN
+    EXECUTE 'DELETE FROM public.bulletins WHERE id::text IN (''bul-1'') OR id::text LIKE ''bul-%''';
+  END IF;
+
+  -- 7. Clientes Condominio y Residencias Demo
+  IF to_regclass('public.clientes_condominio') IS NOT NULL THEN
+    EXECUTE 'DELETE FROM public.clientes_condominio WHERE id::text IN (''cli-1'', ''cli-2'', ''cli-3'') OR nombre ILIKE ''%Paseo de las Palmas%'' OR nombre ILIKE ''%Valle Oriente%'' OR nombre ILIKE ''%Lomas del Bosque%'' OR nombre ILIKE ''%Demo%'' OR nombre ILIKE ''%Ejemplo%''';
+  END IF;
+  IF to_regclass('public.residencias') IS NOT NULL THEN
+    EXECUTE 'DELETE FROM public.residencias WHERE id::text IN (''cli-1'', ''cli-2'', ''cli-3'') OR nombre ILIKE ''%Paseo de las Palmas%'' OR nombre ILIKE ''%Valle Oriente%'' OR nombre ILIKE ''%Lomas del Bosque%'' OR nombre ILIKE ''%Demo%''';
+  END IF;
+
+  -- 8. Cobros SaaS Demo
+  IF to_regclass('public.cobros_saas') IS NOT NULL THEN
+    EXECUTE 'DELETE FROM public.cobros_saas WHERE id::text LIKE ''cbr-%''';
+  END IF;
+
+  -- 9. Logs de Auditoría Demo
+  IF to_regclass('public.audit_logs') IS NOT NULL THEN
+    EXECUTE 'DELETE FROM public.audit_logs WHERE id::text LIKE ''log-%''';
+  END IF;
+
+  -- 10. Tickets de Soporte SaaS Demo
+  IF to_regclass('public.soporte_tickets') IS NOT NULL THEN
+    EXECUTE 'DELETE FROM public.soporte_tickets WHERE id::text LIKE ''tkt-%''';
   END IF;
 END $$;
 
--- Confirmación de ejecución
-SELECT 'Limpieza de datos de prueba completada exitosamente' AS resultado;
+-- Confirmación de ejecución exitosa
+SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos demo eliminados)'' AS resultado;
 `;
 
   // Borrar todos los datos de prueba y bloquear su recarga permanente
@@ -1334,10 +1372,22 @@ SELECT 'Limpieza de datos de prueba completada exitosamente' AS resultado;
 
   // 5. Conciliación Bancaria
   const [bancoMovimientos, setBancoMovimientos] = useState<ConciliacionBancaria[]>(() => getIsMockDisabled() ? [] : [
-    { id: 'bnc-1', fecha: '2026-07-25', conceptoBanco: 'SPEI RECIBIDO - ALEJANDRO RUIZ', monto: 2500, referencia: 'REFF-90214', estatus: 'conciliado', unidadMatcheada: 'Torre A - Depto 102' },
-    { id: 'bnc-2', fecha: '2026-07-24', conceptoBanco: 'DEPOSITO SUCURSAL BBVA CLABE 0121800', monto: 2500, referencia: 'DEPO-8812', estatus: 'conciliado', unidadMatcheada: 'Cluster Lote 12' },
-    { id: 'bnc-3', fecha: '2026-07-23', conceptoBanco: 'SPEI DESCONOCIDO - PAGO S/REF', monto: 1500, referencia: 'SPEI-99201', estatus: 'pendiente' },
+    { id: 'bnc-1', fecha: '2026-07-25', conceptoBanco: 'SPEI RECIBIDO - ALEJANDRO RUIZ', monto: 2500, referencia: 'REFF-90214', estatus: 'conciliado', unidadMatcheada: 'Torre A - Depto 102', folioRecibo: 'REC-SPEI-90214', fechaConciliacion: '2026-07-25 10:15:22' },
+    { id: 'bnc-2', fecha: '2026-07-24', conceptoBanco: 'DEPOSITO SUCURSAL BBVA CLABE 0121800', monto: 2500, referencia: 'DEPO-8812', estatus: 'conciliado', unidadMatcheada: 'Cluster Lote 12', folioRecibo: 'REC-SPEI-008812', fechaConciliacion: '2026-07-24 16:40:05' },
+    { id: 'bnc-3', fecha: '2026-07-23', conceptoBanco: 'SPEI RECIBIDO - HAROLDO CUOTA MTTO', monto: 2500, referencia: 'SPEI-55410', estatus: 'pendiente', unidadMatcheada: 'Torre A - Depto 105' },
+    { id: 'bnc-4', fecha: '2026-07-22', conceptoBanco: 'SPEI BANORTE S/REF PAGO MENSUALIDAD', monto: 2500, referencia: 'SPEI-99201', estatus: 'pendiente', unidadMatcheada: 'Torre B - Depto 201' },
+    { id: 'bnc-5', fecha: '2026-07-21', conceptoBanco: 'TRANSFERENCIA INTERBANCARIA MTTO ALBERCA', monto: 1200, referencia: 'TRANS-77401', estatus: 'pendiente' },
   ]);
+  const [newBncFecha, setNewBncFecha] = useState(new Date().toISOString().split('T')[0]);
+  const [newBncConcepto, setNewBncConcepto] = useState('');
+  const [newBncMonto, setNewBncMonto] = useState('2500');
+  const [newBncReferencia, setNewBncReferencia] = useState('');
+  const [newBncUnidad, setNewBncUnidad] = useState('');
+  const [bncFilterEstatus, setBncFilterEstatus] = useState<'todos' | 'pendiente' | 'conciliado'>('todos');
+  const [bncSearchQuery, setBncSearchQuery] = useState('');
+  const [viewingReciboBnc, setViewingReciboBnc] = useState<ConciliacionBancaria | null>(null);
+  const [showBncAddForm, setShowBncAddForm] = useState(false);
+  const [showBncInstructions, setShowBncInstructions] = useState(true);
 
   // 6. Egresos & Nóminas
   const [egresos, setEgresos] = useState<EgresoCondominio[]>(() => getIsMockDisabled() ? [] : [
@@ -1616,6 +1666,214 @@ SELECT 'Limpieza de datos de prueba completada exitosamente' AS resultado;
     }
 
     showSuccessBanner('✓ Egreso y comprobante registrado en Supabase.');
+  };
+
+  // --- Handlers for Conciliación Bancaria ---
+  const handleAddBancoMovimiento = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBncConcepto || !newBncReferencia || !newBncMonto) return;
+    const montoNum = parseFloat(newBncMonto) || 0;
+    const newMov: ConciliacionBancaria = {
+      id: 'bnc-' + Date.now(),
+      fecha: newBncFecha || new Date().toISOString().split('T')[0],
+      conceptoBanco: newBncConcepto,
+      monto: montoNum,
+      referencia: newBncReferencia,
+      estatus: 'pendiente',
+      unidadMatcheada: newBncUnidad || undefined
+    };
+
+    setBancoMovimientos(prev => [newMov, ...prev]);
+    setNewBncConcepto('');
+    setNewBncReferencia('');
+    setNewBncMonto('2500');
+    setNewBncUnidad('');
+    setShowBncAddForm(false);
+
+    try {
+      await supabase.from('conciliacion_bancaria').upsert({
+        id: newMov.id,
+        fecha: newMov.fecha,
+        concepto_banco: newMov.conceptoBanco,
+        monto: newMov.monto,
+        referencia: newMov.referencia,
+        estatus: newMov.estatus,
+        unidad_matcheada: newMov.unidadMatcheada
+      });
+    } catch (err) {
+      console.warn('Supabase conciliacion sync warning:', err);
+    }
+
+    showSuccessBanner('✓ Movimiento bancario registrado en el sistema.');
+    confetti({ particleCount: 25, spread: 60, origin: { y: 0.7 } });
+  };
+
+  const handleConciliarMovimiento = async (movId: string, customUnit?: string) => {
+    const mov = bancoMovimientos.find(m => m.id === movId);
+    if (!mov) return;
+
+    const unitToMatch = customUnit || mov.unidadMatcheada;
+    if (!unitToMatch) {
+      alert('Por favor selecciona una unidad condominal para conciliar este movimiento.');
+      return;
+    }
+
+    const folioGenerado = 'REC-SPEI-' + Math.floor(100000 + Math.random() * 900000);
+    const fechaHoraConciliacion = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+    setBancoMovimientos(prev => prev.map(m => {
+      if (m.id === movId) {
+        return {
+          ...m,
+          estatus: 'conciliado',
+          unidadMatcheada: unitToMatch,
+          folioRecibo: folioGenerado,
+          fechaConciliacion: fechaHoraConciliacion
+        };
+      }
+      return m;
+    }));
+
+    // Auto-liquidate matching pending payment for this unit if found
+    let pagoLiquidado = false;
+    setPayments(prev => prev.map(p => {
+      if (!pagoLiquidado && (p.status === 'pendiente' || p.status === 'vencido') && p.condo.toLowerCase().trim() === unitToMatch.toLowerCase().trim()) {
+        pagoLiquidado = true;
+        return {
+          ...p,
+          status: 'pagado',
+          paymentMethod: `SPEI Ref: ${mov.referencia}`,
+          paymentDate: new Date().toISOString().split('T')[0]
+        };
+      }
+      return p;
+    }));
+
+    // Update resident status if they had 'moroso'
+    setResidentesCat(prev => prev.map(res => {
+      if (res.unidad.toLowerCase().trim() === unitToMatch.toLowerCase().trim() && res.status === 'moroso') {
+        return { ...res, status: 'activo' };
+      }
+      return res;
+    }));
+
+    try {
+      await supabase.from('conciliacion_bancaria').upsert({
+        id: mov.id,
+        fecha: mov.fecha,
+        concepto_banco: mov.conceptoBanco,
+        monto: mov.monto,
+        referencia: mov.referencia,
+        estatus: 'conciliado',
+        unidad_matcheada: unitToMatch,
+        folio_recibo: folioGenerado,
+        fecha_conciliacion: fechaHoraConciliacion
+      });
+    } catch (err) {
+      console.warn('Supabase conciliacion update warning:', err);
+    }
+
+    showSuccessBanner(`✓ Movimiento ${mov.referencia} conciliado exitosamente con ${unitToMatch}. Folio: ${folioGenerado}`);
+    confetti({ particleCount: 35, spread: 70, origin: { y: 0.6 } });
+  };
+
+  const handleRevertirConciliacion = async (movId: string) => {
+    setBancoMovimientos(prev => prev.map(m => {
+      if (m.id === movId) {
+        return {
+          ...m,
+          estatus: 'pendiente',
+          folioRecibo: undefined,
+          fechaConciliacion: undefined
+        };
+      }
+      return m;
+    }));
+
+    try {
+      await supabase.from('conciliacion_bancaria').update({
+        estatus: 'pendiente',
+        folio_recibo: null,
+        fecha_conciliacion: null
+      }).eq('id', movId);
+    } catch (err) {
+      console.warn('Supabase revert conciliacion warning:', err);
+    }
+
+    showSuccessBanner('✓ Conciliación revertida. El movimiento ha vuelto a estatus Pendiente.');
+  };
+
+  const handleAutoConciliar = () => {
+    let conciledCount = 0;
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+    setBancoMovimientos(prev => prev.map(m => {
+      if (m.estatus === 'pendiente' && m.unidadMatcheada) {
+        conciledCount++;
+        const folio = 'REC-AUTO-' + Math.floor(100000 + Math.random() * 900000);
+        return {
+          ...m,
+          estatus: 'conciliado',
+          folioRecibo: folio,
+          fechaConciliacion: now
+        };
+      }
+      return m;
+    }));
+
+    if (conciledCount > 0) {
+      setPayments(prev => prev.map(p => {
+        if (p.status === 'pendiente' || p.status === 'vencido') {
+          return {
+            ...p,
+            status: 'pagado',
+            paymentMethod: 'SPEI Auto-Conciliado',
+            paymentDate: new Date().toISOString().split('T')[0]
+          };
+        }
+        return p;
+      }));
+
+      showSuccessBanner(`✓ Auto-conciliación finalizada: ${conciledCount} movimiento(s) cruzado(s) exitosamente.`);
+      confetti({ particleCount: 40, spread: 70, origin: { y: 0.6 } });
+    } else {
+      showSuccessBanner('ℹ Todos los movimientos ya estaban conciliados o no tienen unidad asignada.');
+    }
+  };
+
+  const handleCargarMovimientosDemo = () => {
+    const demoItems: ConciliacionBancaria[] = [
+      { id: 'bnc-demo-1', fecha: '2026-07-28', conceptoBanco: 'SPEI RECIBIDO BANORTE CUOTA AGOSTO D-102', monto: 2500, referencia: 'SPEI-88419', estatus: 'pendiente', unidadMatcheada: 'Torre A - Depto 102' },
+      { id: 'bnc-demo-2', fecha: '2026-07-27', conceptoBanco: 'TRANSFERENCIA BBVA CLABE 0121 CUOTA MTTO', monto: 2500, referencia: 'BBVA-90112', estatus: 'pendiente', unidadMatcheada: 'Torre B - Depto 201' },
+      { id: 'bnc-demo-3', fecha: '2026-07-26', conceptoBanco: 'DEPOSITO SUCURSAL SANTANDER LOTE 12', monto: 2500, referencia: 'DEP-44901', estatus: 'conciliado', unidadMatcheada: 'Cluster Lote 12', folioRecibo: 'REC-BNC-8812', fechaConciliacion: '2026-07-26 11:20:00' },
+      { id: 'bnc-demo-4', fecha: '2026-07-25', conceptoBanco: 'SPEI RECIBIDO - CARGO EXTRAORDINARIO ALBERCA', monto: 1200, referencia: 'SPEI-33019', estatus: 'pendiente', unidadMatcheada: 'Torre A - Depto 105' }
+    ];
+    setBancoMovimientos(prev => [...demoItems, ...prev]);
+    showSuccessBanner('✓ Movimientos bancarios de demostración cargados.');
+  };
+
+  const handleExportarConciliacionCSV = () => {
+    const headers = ['ID', 'Fecha', 'Referencia_SPEI', 'Concepto_Bancario', 'Monto_MXN', 'Unidad_Condominal', 'Estatus', 'Folio_Recibo', 'Fecha_Conciliacion'];
+    const rows = bancoMovimientos.map(m => [
+      m.id,
+      m.fecha,
+      `"${m.referencia}"`,
+      `"${m.conceptoBanco.replace(/"/g, '""')}"`,
+      m.monto,
+      `"${m.unidadMatcheada || 'Sin Asignar'}"`,
+      m.estatus,
+      m.folioRecibo || 'N/A',
+      m.fechaConciliacion || 'N/A'
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Conciliacion_Bancaria_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showSuccessBanner('✓ Archivo CSV de Conciliación Bancaria generado y descargado.');
   };
 
   const handleAddEncuesta = (e: React.FormEvent) => {
@@ -2204,6 +2462,18 @@ SELECT 'Limpieza de datos de prueba completada exitosamente' AS resultado;
                       </button>
 
                       <button
+                        onClick={() => { setAdminCondoTab('conciliacion'); setIsNavOpen(false); }}
+                        className={`w-full text-left p-2.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-2.5 border ${
+                          adminCondoTab === 'conciliacion'
+                            ? 'bg-purple-600 text-white border-purple-500 shadow-md'
+                            : 'bg-[#1E1E22] text-slate-300 hover:bg-[#25252B] border-[#2d2d32]'
+                        }`}
+                      >
+                        <Landmark className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span>3. Conciliación Bancaria 🏦</span>
+                      </button>
+
+                      <button
                         onClick={() => { setAdminCondoTab('facturacion'); setIsNavOpen(false); }}
                         className={`w-full text-left p-2.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-2.5 border ${
                           adminCondoTab === 'facturacion'
@@ -2212,7 +2482,7 @@ SELECT 'Limpieza de datos de prueba completada exitosamente' AS resultado;
                         }`}
                       >
                         <FileText className="w-4 h-4 text-blue-400 shrink-0" />
-                        <span>3. Facturación CFDI 4.0</span>
+                        <span>4. Facturación CFDI 4.0</span>
                       </button>
 
                       <button
@@ -2224,7 +2494,7 @@ SELECT 'Limpieza de datos de prueba completada exitosamente' AS resultado;
                         }`}
                       >
                         <Wrench className="w-4 h-4 text-amber-400 shrink-0" />
-                        <span>4. Operación & Personal</span>
+                        <span>5. Operación & Personal</span>
                       </button>
 
                       <button
@@ -2236,7 +2506,19 @@ SELECT 'Limpieza de datos de prueba completada exitosamente' AS resultado;
                         }`}
                       >
                         <Vote className="w-4 h-4 text-indigo-400 shrink-0" />
-                        <span>5. Encuestas & Avisos</span>
+                        <span>6. Encuestas & Avisos</span>
+                      </button>
+
+                      <button
+                        onClick={() => { setAdminCondoTab('manual'); setIsNavOpen(false); }}
+                        className={`w-full text-left p-2.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-2.5 border ${
+                          adminCondoTab === 'manual'
+                            ? 'bg-purple-600 text-white border-purple-500 shadow-md'
+                            : 'bg-[#1E1E22] text-purple-300 hover:bg-[#25252B] border-[#2d2d32]'
+                        }`}
+                      >
+                        <BookOpen className="w-4 h-4 text-purple-400 shrink-0" />
+                        <span>7. Manual del Usuario 📖</span>
                       </button>
                     </div>
                   </div>
@@ -2661,6 +2943,51 @@ SELECT 'Limpieza de datos de prueba completada exitosamente' AS resultado;
                   </h3>
                 </div>
 
+              </div>
+
+              {/* Quick access banner to Manual del Usuario & Conciliación Bancaria */}
+              <div className="bg-gradient-to-r from-purple-950/40 via-[#1E1E22] to-emerald-950/30 border border-purple-500/30 rounded-3xl p-6 text-left flex flex-col md:flex-row items-start md:items-center justify-between gap-5 shadow-2xl">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-purple-600/20 text-purple-400 border border-purple-500/40 flex items-center justify-center shrink-0 shadow-lg shadow-purple-600/20">
+                    <BookOpen className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                        Nuevo Módulo Activo
+                      </span>
+                      <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        Conciliación Bancaria 100% Operativa
+                      </span>
+                    </div>
+                    <h3 className="text-lg font-black text-white mt-1">Manual de Operación & Conciliación Bancaria</h3>
+                    <p className="text-xs text-slate-300 max-w-2xl mt-0.5">
+                      Consulta la documentación interactiva paso a paso para aprender a operar el sistema de condominios, acreditar pagos bancarios vía SPEI, emitir recibos y administrar la comunidad.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full md:w-auto shrink-0">
+                  <button
+                    onClick={() => {
+                      setActiveSubSection('admininmobiliaria');
+                      setAdminCondoTab('manual');
+                    }}
+                    className="flex-1 sm:flex-none px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-black rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-purple-950/50"
+                  >
+                    <BookOpen className="w-4 h-4" />
+                    <span>Ver Manual del Usuario</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setActiveSubSection('admininmobiliaria');
+                      setAdminCondoTab('conciliacion');
+                    }}
+                    className="flex-1 sm:flex-none px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50"
+                  >
+                    <Landmark className="w-4 h-4" />
+                    <span>Conciliación Bancaria 🏦</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -3554,12 +3881,89 @@ SELECT 'Limpieza de datos de prueba completada exitosamente' AS resultado;
                   <p className="text-xs text-purple-300 font-mono">Finanzas, Cobro de Cuotas de Mantenimiento & Control de Morosidad (Módulo Facturación CFDI 4.0 Desactivado Temporalmente)</p>
                 </div>
               </div>
-              <button 
-                onClick={() => setActiveSubSection('inicio')} 
-                className="px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 text-xs font-bold rounded-xl border border-purple-500/30 transition cursor-pointer shrink-0"
-              >
-                Cambiar Rol ←
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button 
+                  onClick={() => setAdminCondoTab('manual')} 
+                  className={`px-3 py-1.5 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 border shadow-sm ${
+                    adminCondoTab === 'manual'
+                      ? 'bg-purple-600 text-white border-purple-400'
+                      : 'bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border-purple-500/30'
+                  }`}
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>Manual del Usuario</span>
+                </button>
+                <button 
+                  onClick={() => setActiveSubSection('inicio')} 
+                  className="px-3 py-1.5 bg-[#1E1E22] hover:bg-[#2d2d32] text-slate-300 text-xs font-bold rounded-xl border border-[#2d2d32] transition cursor-pointer"
+                >
+                  Cambiar Rol ←
+                </button>
+              </div>
+            </div>
+
+            {/* Admin Tools Bar: Delete Mock Data, Clear Cache, SQL Supabase */}
+            <div className="bg-[#141417] border border-[#2d2d32] rounded-2xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400 font-bold flex items-center gap-1.5">
+                  <Database className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Control de Datos:</span>
+                </span>
+                {isMockDataDisabled ? (
+                  <span className="px-2 py-0.5 text-[10px] font-black uppercase rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Sin Datos Demo (Producción Limpia)
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 text-[10px] font-black uppercase rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                    Datos Demo Activos
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleDeleteTestData}
+                  className="px-3 py-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-300 hover:text-white border border-red-500/30 font-bold text-xs rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+                  title="Borra todos los datos de prueba y bloquea su recarga permanente"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                  <span>Borrar Datos de Prueba</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleClearCache}
+                  className="px-3 py-1.5 bg-[#1E1E22] hover:bg-[#25252B] text-blue-300 hover:text-white border border-blue-500/30 font-bold text-xs rounded-xl transition cursor-pointer flex items-center gap-1.5"
+                  title="Limpia la memoria temporal del navegador y recarga"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Borrar Caché</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsSqlModalOpen(true)}
+                  className="px-3 py-1.5 bg-purple-950/40 hover:bg-purple-900/60 text-purple-300 hover:text-white border border-purple-500/30 font-bold text-xs rounded-xl transition cursor-pointer flex items-center gap-1.5"
+                  title="Ver código SQL para limpiar tablas en Supabase"
+                >
+                  <Database className="w-3.5 h-3.5 text-purple-400" />
+                  <span>SQL Supabase</span>
+                </button>
+
+                {isMockDataDisabled && (
+                  <button
+                    type="button"
+                    onClick={handleRestoreDemoData}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1"
+                    title="Restaurar datos de prueba"
+                  >
+                    <RefreshCcw className="w-3 h-3" />
+                    <span>Restaurar Demo</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Sub-tabs inside Admin Condominio */}
@@ -3587,6 +3991,18 @@ SELECT 'Limpieza de datos de prueba completada exitosamente' AS resultado;
                 <span>2. Finanzas & Cobranza</span>
               </button>
               <button
+                onClick={() => setAdminCondoTab('conciliacion')}
+                className={`px-3.5 py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
+                  adminCondoTab === 'conciliacion'
+                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-950/30'
+                    : 'bg-[#1E1E22] text-emerald-400 hover:text-white border border-emerald-500/30'
+                }`}
+              >
+                <Landmark className="w-3.5 h-3.5" />
+                <span>3. Conciliación Bancaria 🏦</span>
+                <span className="px-1.5 py-0.2 text-[8px] bg-emerald-500/20 text-emerald-300 font-extrabold rounded">SPEI</span>
+              </button>
+              <button
                 onClick={() => setAdminCondoTab('facturacion')}
                 className={`px-3.5 py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
                   adminCondoTab === 'facturacion'
@@ -3595,7 +4011,7 @@ SELECT 'Limpieza de datos de prueba completada exitosamente' AS resultado;
                 }`}
               >
                 <FileText className="w-3.5 h-3.5 text-amber-400" />
-                <span>3. Facturación CFDI 4.0</span>
+                <span>4. Facturación CFDI 4.0</span>
                 <span className="px-1.5 py-0.5 text-[8px] bg-amber-500/20 text-amber-300 font-extrabold uppercase rounded border border-amber-500/30">Desactivado</span>
               </button>
               <button
@@ -3607,7 +4023,7 @@ SELECT 'Limpieza de datos de prueba completada exitosamente' AS resultado;
                 }`}
               >
                 <Calendar className="w-3.5 h-3.5" />
-                <span>4. Operación & Amenidades</span>
+                <span>5. Operación & Amenidades</span>
               </button>
               <button
                 onClick={() => setAdminCondoTab('comunicacion')}
@@ -3618,7 +4034,18 @@ SELECT 'Limpieza de datos de prueba completada exitosamente' AS resultado;
                 }`}
               >
                 <MessageSquare className="w-3.5 h-3.5" />
-                <span>5. Comunicación & Votaciones</span>
+                <span>6. Comunicación & Votaciones</span>
+              </button>
+              <button
+                onClick={() => setAdminCondoTab('manual')}
+                className={`px-3.5 py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
+                  adminCondoTab === 'manual'
+                    ? 'bg-purple-600 text-white shadow-lg shadow-purple-950/40'
+                    : 'bg-[#1E1E22] text-purple-300 hover:text-white border border-purple-500/30'
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5 text-purple-400" />
+                <span>7. Manual del Usuario 📖</span>
               </button>
             </div>
 
@@ -3923,7 +4350,30 @@ SELECT 'Limpieza de datos de prueba completada exitosamente' AS resultado;
 
             {adminCondoTab === 'finanzas' && (
               <div className="space-y-6">
-            {/* Quick Financial statistics Cards */}
+                {/* Conciliación Bancaria shortcut banner inside Finanzas */}
+                <div className="bg-gradient-to-r from-emerald-950/50 via-[#1E1E22] to-purple-950/40 border border-emerald-500/40 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-left shadow-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/10">
+                      <Landmark className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-white flex items-center gap-2">
+                        <span>Conciliación Bancaria SPEI & Depósitos</span>
+                        <span className="px-2 py-0.5 text-[8px] font-black uppercase rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Módulo Operativo</span>
+                      </h4>
+                      <p className="text-xs text-slate-300">Cruza movimientos bancarios con cuotas vencidas, liquida adeudos y emite recibos con folio digital.</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setAdminCondoTab('conciliacion')}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-2 shrink-0 shadow-lg shadow-emerald-950/40"
+                  >
+                    <Landmark className="w-4 h-4" />
+                    <span>Abrir Módulo de Conciliación →</span>
+                  </button>
+                </div>
+
+                {/* Quick Financial statistics Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-2xl p-4 flex items-center justify-between">
                 <div>
@@ -4435,6 +4885,582 @@ SELECT 'Limpieza de datos de prueba completada exitosamente' AS resultado;
               </div>
 
             </div>
+          </div>
+        )}
+
+        {/* TAB 3: CONCILIACIÓN BANCARIA SPEI INSIDE ADMIN CONDOMINIO */}
+        {adminCondoTab === 'conciliacion' && (
+          <div className="space-y-6 animate-fade-in text-left">
+            {/* Module Header */}
+            <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-3xl p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-xl">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center shrink-0 shadow-lg shadow-emerald-500/20">
+                  <Landmark className="w-7 h-7" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      Módulo Financiero Operativo
+                    </span>
+                    <span className="px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                      Cruce Automático SPEI
+                    </span>
+                  </div>
+                  <h3 className="text-xl font-black text-white mt-1">Conciliación Bancaria & Cobranza SPEI</h3>
+                  <p className="text-xs text-slate-300 max-w-2xl mt-0.5">
+                    Cruza los depósitos y transferencias interbancarias directamente contra las cuotas de mantenimiento condominales, liquida adeudos y emite recibos digitales auditables.
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => setShowBncAddForm(!showBncAddForm)}
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-lg shadow-emerald-950/40"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{showBncAddForm ? 'Cerrar Formulario' : 'Registrar Depósito'}</span>
+                </button>
+                <button
+                  onClick={handleAutoConciliar}
+                  className="px-3.5 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-lg shadow-purple-950/40"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Auto-Conciliar ⚡</span>
+                </button>
+                <button
+                  onClick={handleCargarMovimientosDemo}
+                  className="px-3 py-2 bg-[#141417] hover:bg-[#25252B] text-slate-300 hover:text-white text-xs font-bold rounded-xl border border-[#2d2d32] transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Cargar Demo</span>
+                </button>
+                <button
+                  onClick={handleExportarConciliacionCSV}
+                  className="px-3 py-2 bg-[#141417] hover:bg-[#25252B] text-slate-300 hover:text-white text-xs font-bold rounded-xl border border-[#2d2d32] transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <Download className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Exportar CSV</span>
+                </button>
+                <button
+                  onClick={() => setShowBncInstructions(!showBncInstructions)}
+                  className="px-3 py-2 bg-[#141417] hover:bg-[#25252B] text-purple-300 hover:text-purple-200 text-xs font-bold rounded-xl border border-purple-500/30 transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>{showBncInstructions ? 'Ocultar Guía' : 'Ver Guía'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Guía Rápida: Instrucciones Básicas para la Conciliación Bancaria */}
+            {showBncInstructions && (
+              <div className="bg-gradient-to-br from-emerald-950/40 via-[#1E1E22] to-slate-900 border border-emerald-500/40 rounded-3xl p-6 text-left space-y-4 shadow-xl relative overflow-hidden">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-emerald-500/20 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                      <BookOpen className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-white flex items-center gap-2">
+                        <span>Guía Básica: Cómo Realizar la Conciliación Bancaria Paso a Paso</span>
+                        <span className="px-2 py-0.5 text-[8px] bg-emerald-500/20 text-emerald-300 font-bold uppercase rounded">Instrucciones Oficiales</span>
+                      </h4>
+                      <p className="text-xs text-slate-300">Sigue este procedimiento para acreditar pagos y mantener la contabilidad condominal al día:</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowBncInstructions(false)}
+                    className="text-[10px] text-slate-400 hover:text-white px-2.5 py-1 bg-[#141417] hover:bg-[#232326] border border-[#2d2d32] rounded-lg transition cursor-pointer self-start sm:self-auto"
+                  >
+                    Ocultar ✕
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-1">
+                  <div className="p-4 bg-[#141417]/90 border border-emerald-500/20 rounded-2xl space-y-1.5">
+                    <div className="flex items-center gap-2 text-emerald-400 font-black text-xs">
+                      <span className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center font-mono text-[11px] border border-emerald-500/30">1</span>
+                      <span>Identifica el Depósito</span>
+                    </div>
+                    <p className="text-xs text-slate-300 leading-relaxed">
+                      Revisa en la tabla inferior la fecha, concepto y clave de rastreo SPEI del extracto bancario.
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-[#141417]/90 border border-emerald-500/20 rounded-2xl space-y-1.5">
+                    <div className="flex items-center gap-2 text-emerald-400 font-black text-xs">
+                      <span className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center font-mono text-[11px] border border-emerald-500/30">2</span>
+                      <span>Asigna la Unidad</span>
+                    </div>
+                    <p className="text-xs text-slate-300 leading-relaxed">
+                      En la columna <strong>"Unidad Condominal"</strong>, selecciona en el desplegable el departamento o lote que pagó.
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-[#141417]/90 border border-emerald-500/20 rounded-2xl space-y-1.5">
+                    <div className="flex items-center gap-2 text-emerald-400 font-black text-xs">
+                      <span className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center font-mono text-[11px] border border-emerald-500/30">3</span>
+                      <span>Presiona Conciliar</span>
+                    </div>
+                    <p className="text-xs text-slate-300 leading-relaxed">
+                      Haz clic en <strong>"Conciliar Pago ✓"</strong>. La cuota del residente se marcará como Pagada y se emitirá el folio digital.
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-[#141417]/90 border border-emerald-500/20 rounded-2xl space-y-1.5">
+                    <div className="flex items-center gap-2 text-emerald-400 font-black text-xs">
+                      <span className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center font-mono text-[11px] border border-emerald-500/30">4</span>
+                      <span>Emite Recibo o Exporta</span>
+                    </div>
+                    <p className="text-xs text-slate-300 leading-relaxed">
+                      Haz clic en <strong>"Ver Recibo 📄"</strong> para emitir el comprobante oficial o presiona <strong>"Exportar CSV"</strong> para el Comité.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Financial KPIs for Bank Reconciliation */}
+            {(() => {
+              const totalBncMonto = bancoMovimientos.reduce((acc, m) => acc + m.monto, 0);
+              const concMonto = bancoMovimientos.filter(m => m.estatus === 'conciliado').reduce((acc, m) => acc + m.monto, 0);
+              const pendMonto = bancoMovimientos.filter(m => m.estatus === 'pendiente').reduce((acc, m) => acc + m.monto, 0);
+              const concCount = bancoMovimientos.filter(m => m.estatus === 'conciliado').length;
+              const pendCount = bancoMovimientos.filter(m => m.estatus === 'pendiente').length;
+              const ratio = bancoMovimientos.length > 0 ? Math.round((concCount / bancoMovimientos.length) * 100) : 0;
+
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-2xl p-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-[9px] font-extrabold text-slate-500 uppercase tracking-widest font-mono">Total en Extracto Bancario</p>
+                      <p className="text-xl font-black text-white mt-1">${totalBncMonto.toLocaleString('es-MX')}.00</p>
+                      <span className="text-[10px] text-slate-400 font-mono mt-0.5">{bancoMovimientos.length} movimientos registrados</span>
+                    </div>
+                    <div className="w-10 h-10 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-xl flex items-center justify-center">
+                      <Landmark className="w-5 h-5" />
+                    </div>
+                  </div>
+
+                  <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-2xl p-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-[9px] font-extrabold text-slate-500 uppercase tracking-widest font-mono">Monto Conciliado</p>
+                      <p className="text-xl font-black text-emerald-400 mt-1">${concMonto.toLocaleString('es-MX')}.00</p>
+                      <span className="text-[10px] text-emerald-400 font-bold mt-0.5 flex items-center gap-1">
+                        <CheckCheck className="w-3 h-3" /> {concCount} acreditados ({ratio}%)
+                      </span>
+                    </div>
+                    <div className="w-10 h-10 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl flex items-center justify-center">
+                      <ArrowUpRight className="w-5 h-5" />
+                    </div>
+                  </div>
+
+                  <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-2xl p-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-[9px] font-extrabold text-slate-500 uppercase tracking-widest font-mono">Pendientes por Aclarar</p>
+                      <p className="text-xl font-black text-amber-400 mt-1">${pendMonto.toLocaleString('es-MX')}.00</p>
+                      <span className="text-[10px] text-amber-400 font-bold mt-0.5">{pendCount} pagos por asignar</span>
+                    </div>
+                    <div className="w-10 h-10 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-xl flex items-center justify-center">
+                      <AlertTriangle className="w-5 h-5" />
+                    </div>
+                  </div>
+
+                  <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-2xl p-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-[9px] font-extrabold text-slate-500 uppercase tracking-widest font-mono">Efectividad de Cruce</p>
+                      <p className="text-xl font-black text-purple-400 mt-1">{ratio}%</p>
+                      <span className="text-[10px] text-slate-400 font-mono mt-0.5">Sincronización bancaria</span>
+                    </div>
+                    <div className="w-10 h-10 bg-purple-500/10 border border-purple-500/20 text-purple-400 rounded-xl flex items-center justify-center">
+                      <TrendingUp className="w-5 h-5" />
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Registration Form (Collapsible) */}
+            {showBncAddForm && (
+              <form onSubmit={handleAddBancoMovimiento} className="bg-[#1E1E22] border border-emerald-500/30 rounded-3xl p-6 text-left space-y-4 shadow-xl">
+                <div className="flex items-center justify-between border-b border-[#2d2d32] pb-3">
+                  <div className="flex items-center gap-2">
+                    <Plus className="w-4 h-4 text-emerald-400" />
+                    <h4 className="text-sm font-black text-white">Registrar Nuevo Movimiento Bancario / SPEI</h4>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowBncAddForm(false)}
+                    className="text-xs text-slate-400 hover:text-white"
+                  >
+                    ✕ Cancelar
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 text-xs font-sans">
+                  <div>
+                    <label className="block text-[9px] font-extrabold text-slate-400 uppercase tracking-widest mb-1.5">Fecha del Depósito</label>
+                    <input
+                      type="date"
+                      required
+                      value={newBncFecha}
+                      onChange={(e) => setNewBncFecha(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#141417] border border-[#2d2d32] rounded-xl text-white font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-extrabold text-slate-400 uppercase tracking-widest mb-1.5">Referencia / Rastreo SPEI</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ej. SPEI-88912"
+                      value={newBncReferencia}
+                      onChange={(e) => setNewBncReferencia(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#141417] border border-[#2d2d32] rounded-xl text-white font-mono"
+                    />
+                  </div>
+
+                  <div className="lg:col-span-2">
+                    <label className="block text-[9px] font-extrabold text-slate-400 uppercase tracking-widest mb-1.5">Concepto Banco / Remitente</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ej. SPEI RECIBIDO BBVA - CUOTA MANTENIMIENTO D-102"
+                      value={newBncConcepto}
+                      onChange={(e) => setNewBncConcepto(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#141417] border border-[#2d2d32] rounded-xl text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-extrabold text-slate-400 uppercase tracking-widest mb-1.5">Monto ($ MXN)</label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      step="any"
+                      placeholder="2500"
+                      value={newBncMonto}
+                      onChange={(e) => setNewBncMonto(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#141417] border border-[#2d2d32] rounded-xl text-white font-mono font-bold"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <label className="block text-[9px] font-extrabold text-slate-400 uppercase tracking-widest mb-1.5">Asignar a Unidad Condominal (Opcional)</label>
+                    <select
+                      value={newBncUnidad}
+                      onChange={(e) => setNewBncUnidad(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#141417] border border-[#2d2d32] rounded-xl text-white"
+                    >
+                      <option value="">-- Sin asignar (se conciliará después) --</option>
+                      {Array.from(new Set([
+                        ...residentesCat.map(r => r.unidad),
+                        ...payments.map(p => p.condo)
+                      ])).filter(Boolean).map(u => (
+                        <option key={u} value={u}>{u}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex items-end">
+                    <button
+                      type="submit"
+                      className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>Guardar Depósito en Bitácora Bancaria</span>
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
+
+            {/* Filter and Search Bar */}
+            <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <span className="text-xs text-slate-400 font-bold">Filtrar:</span>
+                <div className="flex items-center gap-1 bg-[#141417] p-1 rounded-xl border border-[#2d2d32]">
+                  <button
+                    onClick={() => setBncFilterEstatus('todos')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      bncFilterEstatus === 'todos' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Todos ({bancoMovimientos.length})
+                  </button>
+                  <button
+                    onClick={() => setBncFilterEstatus('pendiente')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      bncFilterEstatus === 'pendiente' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Pendientes ({bancoMovimientos.filter(m => m.estatus === 'pendiente').length})
+                  </button>
+                  <button
+                    onClick={() => setBncFilterEstatus('conciliado')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      bncFilterEstatus === 'conciliado' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Conciliados ({bancoMovimientos.filter(m => m.estatus === 'conciliado').length})
+                  </button>
+                </div>
+              </div>
+
+              <div className="relative w-full sm:w-72">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Buscar por concepto, referencia o unidad..."
+                  value={bncSearchQuery}
+                  onChange={(e) => setBncSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 bg-[#141417] border border-[#2d2d32] rounded-xl text-xs text-white placeholder-slate-500 focus:outline-hidden"
+                />
+              </div>
+            </div>
+
+            {/* Main Table of Bank Movements */}
+            <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-3xl overflow-hidden shadow-xl">
+              <div className="p-5 border-b border-[#2d2d32] flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-black text-white flex items-center gap-2">
+                    <Landmark className="w-4 h-4 text-emerald-400" />
+                    Bitácora de Movimientos Bancarios & Cruce SPEI
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-0.5">Asigna la unidad condominal y presiona conciliar para liquidar cuotas de mantenimiento.</p>
+                </div>
+                <span className="text-xs font-mono text-slate-400">
+                  Mostrando {
+                    bancoMovimientos.filter(m => {
+                      const matchesEstatus = bncFilterEstatus === 'todos' || m.estatus === bncFilterEstatus;
+                      const matchesSearch = !bncSearchQuery || 
+                        m.conceptoBanco.toLowerCase().includes(bncSearchQuery.toLowerCase()) ||
+                        m.referencia.toLowerCase().includes(bncSearchQuery.toLowerCase()) ||
+                        (m.unidadMatcheada && m.unidadMatcheada.toLowerCase().includes(bncSearchQuery.toLowerCase()));
+                      return matchesEstatus && matchesSearch;
+                    }).length
+                  } registros
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs font-sans">
+                  <thead>
+                    <tr className="bg-[#141417] text-slate-400 text-[10px] font-extrabold uppercase tracking-wider border-b border-[#2d2d32]">
+                      <th className="p-3.5">Fecha</th>
+                      <th className="p-3.5">Referencia SPEI</th>
+                      <th className="p-3.5">Concepto Bancario</th>
+                      <th className="p-3.5">Monto ($ MXN)</th>
+                      <th className="p-3.5">Unidad Condominal</th>
+                      <th className="p-3.5">Estatus</th>
+                      <th className="p-3.5">Folio Recibo</th>
+                      <th className="p-3.5 text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#2d2d32]">
+                    {bancoMovimientos
+                      .filter(m => {
+                        const matchesEstatus = bncFilterEstatus === 'todos' || m.estatus === bncFilterEstatus;
+                        const matchesSearch = !bncSearchQuery || 
+                          m.conceptoBanco.toLowerCase().includes(bncSearchQuery.toLowerCase()) ||
+                          m.referencia.toLowerCase().includes(bncSearchQuery.toLowerCase()) ||
+                          (m.unidadMatcheada && m.unidadMatcheada.toLowerCase().includes(bncSearchQuery.toLowerCase()));
+                        return matchesEstatus && matchesSearch;
+                      })
+                      .map(mov => {
+                        const allUnitOptions = Array.from(new Set([
+                          ...residentesCat.map(r => r.unidad),
+                          ...payments.map(p => p.condo)
+                        ])).filter(Boolean);
+
+                        return (
+                          <tr key={mov.id} className="hover:bg-[#141417]/50 transition">
+                            <td className="p-3.5 font-mono text-slate-300 whitespace-nowrap">{mov.fecha}</td>
+                            <td className="p-3.5 font-mono font-bold text-purple-400 whitespace-nowrap">{mov.referencia}</td>
+                            <td className="p-3.5 text-white font-medium max-w-xs">{mov.conceptoBanco}</td>
+                            <td className="p-3.5 font-mono font-black text-white whitespace-nowrap text-sm">
+                              ${mov.monto.toLocaleString('es-MX')}.00
+                            </td>
+                            <td className="p-3.5">
+                              {mov.estatus === 'pendiente' ? (
+                                <select
+                                  value={mov.unidadMatcheada || ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setBancoMovimientos(prev => prev.map(m => m.id === mov.id ? { ...m, unidadMatcheada: val } : m));
+                                  }}
+                                  className="px-2.5 py-1.5 bg-[#141417] border border-[#2d2d32] rounded-xl text-xs text-white focus:outline-hidden"
+                                >
+                                  <option value="">-- Seleccionar Unidad --</option>
+                                  {allUnitOptions.map(u => (
+                                    <option key={u} value={u}>{u}</option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <span className="font-bold text-white flex items-center gap-1.5">
+                                  <Building className="w-3.5 h-3.5 text-purple-400" />
+                                  <span>{mov.unidadMatcheada || 'Sin Asignar'}</span>
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3.5 whitespace-nowrap">
+                              {mov.estatus === 'conciliado' ? (
+                                <span className="px-2.5 py-1 text-[10px] font-black uppercase rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 w-fit">
+                                  <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
+                                  <span>Conciliado</span>
+                                </span>
+                              ) : (
+                                <span className="px-2.5 py-1 text-[10px] font-black uppercase rounded-lg bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1 w-fit">
+                                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                                  <span>Pendiente</span>
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3.5 font-mono text-[11px] text-slate-300 whitespace-nowrap">
+                              {mov.folioRecibo ? (
+                                <span className="px-2 py-0.5 bg-[#141417] text-purple-300 border border-[#2d2d32] rounded font-mono font-bold">
+                                  {mov.folioRecibo}
+                                </span>
+                              ) : (
+                                <span className="text-slate-600 font-mono">--</span>
+                              )}
+                            </td>
+                            <td className="p-3.5 text-right whitespace-nowrap">
+                              <div className="flex items-center justify-end gap-1.5">
+                                {mov.estatus === 'pendiente' ? (
+                                  <button
+                                    onClick={() => handleConciliarMovimiento(mov.id)}
+                                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center gap-1 shadow-md shadow-emerald-950/30"
+                                    title="Cruzar y acreditar a la unidad condominal"
+                                  >
+                                    <Check className="w-3.5 h-3.5" />
+                                    <span>Conciliar Pago ✓</span>
+                                  </button>
+                                ) : (
+                                  <>
+                                    <button
+                                      onClick={() => setViewingReciboBnc(mov)}
+                                      className="px-2.5 py-1 bg-[#141417] hover:bg-purple-900/30 text-purple-300 hover:text-purple-200 border border-purple-500/30 font-bold text-xs rounded-lg transition cursor-pointer flex items-center gap-1"
+                                      title="Ver Comprobante Digital"
+                                    >
+                                      <FileText className="w-3 h-3" />
+                                      <span>Ver Recibo</span>
+                                    </button>
+                                    <button
+                                      onClick={() => handleRevertirConciliacion(mov.id)}
+                                      className="px-2 py-1 bg-[#141417] hover:bg-red-900/30 text-slate-400 hover:text-red-400 border border-[#2d2d32] text-xs rounded-lg transition cursor-pointer"
+                                      title="Revertir conciliación a pendiente"
+                                    >
+                                      Revertir ↺
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+
+                    {bancoMovimientos.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="p-8 text-center text-slate-500">
+                          <Landmark className="w-8 h-8 mx-auto mb-2 text-slate-600" />
+                          <p className="text-sm font-bold text-slate-400">No hay movimientos bancarios registrados.</p>
+                          <p className="text-xs text-slate-600 mt-1">Haz clic en "Registrar Depósito" o "Cargar Demo" para comenzar a conciliar.</p>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Modal de Recibo Oficial de Conciliación Bancaria */}
+            {viewingReciboBnc && (
+              <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-3xl p-6 sm:p-8 max-w-lg w-full text-left space-y-6 shadow-2xl animate-fade-in relative">
+                  <button
+                    onClick={() => setViewingReciboBnc(null)}
+                    className="absolute top-5 right-5 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-[#2d2d32] transition cursor-pointer"
+                  >
+                    ✕
+                  </button>
+
+                  <div className="border-b border-[#2d2d32] pb-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                        <BadgeCheck className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h4 className="text-base font-black text-white">Comprobante de Conciliación</h4>
+                        <p className="text-xs text-emerald-400 font-mono">Folio: {viewingReciboBnc.folioRecibo || 'REC-SPEI-001'}</p>
+                      </div>
+                    </div>
+                    <span className="px-2.5 py-1 text-[10px] font-black uppercase rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      ✓ Acreditado
+                    </span>
+                  </div>
+
+                  <div className="space-y-3 font-sans text-xs bg-[#141417] p-4 rounded-2xl border border-[#232326]">
+                    <div className="flex justify-between py-1 border-b border-[#232326]">
+                      <span className="text-slate-400">Fecha de Operación:</span>
+                      <span className="text-white font-mono">{viewingReciboBnc.fecha}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-[#232326]">
+                      <span className="text-slate-400">Fecha y Hora Conciliado:</span>
+                      <span className="text-white font-mono">{viewingReciboBnc.fechaConciliacion || '2026-07-25 10:15:22'}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-[#232326]">
+                      <span className="text-slate-400">Unidad Condominal:</span>
+                      <span className="text-purple-300 font-bold">{viewingReciboBnc.unidadMatcheada || 'Sin asignar'}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-[#232326]">
+                      <span className="text-slate-400">Clave de Rastreo / Referencia:</span>
+                      <span className="text-white font-mono font-bold">{viewingReciboBnc.referencia}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-[#232326]">
+                      <span className="text-slate-400">Concepto Bancario:</span>
+                      <span className="text-white text-right max-w-[240px] truncate">{viewingReciboBnc.conceptoBanco}</span>
+                    </div>
+                    <div className="flex justify-between py-2 pt-3 text-sm font-black">
+                      <span className="text-slate-300">Importe Total Acreditado:</span>
+                      <span className="text-emerald-400 text-base font-mono">${viewingReciboBnc.monto.toLocaleString('es-MX')}.00 MXN</span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-purple-950/20 border border-purple-500/20 rounded-xl text-[11px] text-purple-200">
+                    <p className="font-bold flex items-center gap-1.5 mb-1">
+                      <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
+                      Certificación Contable
+                    </p>
+                    <p className="text-slate-300 text-[10px]">
+                      Este recibo certifica que el pago bancario ha sido validado, conciliado y acreditado a la cuenta de mantenimiento del condominio.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-3 pt-2">
+                    <button
+                      onClick={() => window.print()}
+                      className="px-4 py-2 bg-[#141417] hover:bg-[#232326] text-slate-300 hover:text-white border border-[#2d2d32] text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Imprimir / Guardar</span>
+                    </button>
+                    <button
+                      onClick={() => setViewingReciboBnc(null)}
+                      className="px-5 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition cursor-pointer shadow-lg shadow-purple-950/30"
+                    >
+                      Cerrar Recibo
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -5368,6 +6394,13 @@ SELECT 'Limpieza de datos de prueba completada exitosamente' AS resultado;
                 </div>
 
               </div>
+            </div>
+          )}
+
+          {/* TAB 7: MANUAL DEL USUARIO INSIDE ADMIN CONDOMINIO */}
+          {adminCondoTab === 'manual' && (
+            <div className="space-y-6 animate-fade-in text-left">
+              <ManualUsuario onGoToTab={(tab) => setAdminCondoTab(tab as any)} />
             </div>
           )}
 

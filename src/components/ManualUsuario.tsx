@@ -12,10 +12,17 @@ import {
   ChevronRight, 
   HelpCircle, 
   CheckCircle2, 
-  ArrowRight,
-  Sparkles,
-  ClipboardCheck,
-  FileText
+  ArrowRight, 
+  Sparkles, 
+  ClipboardCheck, 
+  FileText, 
+  DollarSign, 
+  Landmark, 
+  Calendar, 
+  Package, 
+  Building2, 
+  CheckCheck, 
+  Download 
 } from 'lucide-react';
 
 interface ManualUsuarioProps {
@@ -24,119 +31,193 @@ interface ManualUsuarioProps {
 
 export const ManualUsuario: React.FC<ManualUsuarioProps> = ({ onGoToTab }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeCategory, setActiveCategory] = useState<'all' | 'inicio' | 'residencias' | 'personas' | 'caseta' | 'whatsapp'>('all');
+  const [activeCategory, setActiveCategory] = useState<'all' | 'roles' | 'propiedades' | 'finanzas' | 'conciliacion' | 'amenidades' | 'caseta' | 'comunicacion'>('all');
 
   const manualSteps = [
     {
       id: 'step-1',
-      category: 'inicio',
-      title: '1. Acceso al Sistema y Roles',
-      icon: <Shield className="w-5 h-5 text-red-500" />,
-      tag: 'Configuración Básica',
-      description: 'Cómo ingresar a la plataforma y entender los privilegios de cada cuenta.',
+      category: 'roles',
+      title: '1. Arquitectura Multi-Rol y Acceso al Sistema',
+      icon: <Shield className="w-5 h-5 text-purple-400" />,
+      tag: 'Seguridad & Roles',
+      description: 'Conoce los 5 paneles integrados en la plataforma y cómo cambiar de perfil según la responsabilidad.',
       points: [
         {
-          title: 'Iniciar Sesión',
-          text: 'Ingresa a la pantalla principal. Puedes usar las credenciales asignadas por tu administrador o usar las de prueba temporal: usuario "admin" con contraseña "Admin_123" para control absoluto.'
+          title: 'Panel 1: Super Administrador (SaaS Owner)',
+          text: 'Supervisión global de todos los condominios registrados, control de clientes, métricas financieras de licencias (MRR, ARR, Churn Rate) y auditoría de accesos.'
         },
         {
-          title: 'Roles de Usuarios',
-          text: 'El sistema maneja dos roles principales en caseta y administración: "Director Administrador 🛡️" (gestiona todo) y "Oficial de Seguridad / Caseta 👮" (controla los accesos diario y escanea QR).'
+          title: 'Panel 2: Administrador del Condominio / Inmobiliaria',
+          text: 'Gestión diaria del desarrollo: catálogo de torres y departamentos, cobro de cuotas, conciliación bancaria SPEI, personal operativo y mesa de ayuda.'
         },
         {
-          title: 'Independencia de Residencias',
-          text: 'Cada subdivisión o condominio tiene su propio sub-administrador y su propia caseta de oficialía, garantizando la privacidad de los datos.'
+          title: 'Panel 3: Comité de Vigilancia',
+          text: 'Auditoría financiera independiente, revisión de estados de cuenta vs presupuestos extraordinarios y validación de actas de asamblea con firma digital.'
+        },
+        {
+          title: 'Panel 4: Residente / Propietario (PWA Móvil)',
+          text: 'Portal de autogestión para consultar adeudos, descargar recibos, generar pases QR para invitados por WhatsApp, reservar amenidades y votar en asambleas.'
+        },
+        {
+          title: 'Panel 5: Caseta de Seguridad & Conserje',
+          text: 'Control de visitas en vivo con alerta inmediata de morosidad, bitácora de guardias por turno y registro de paquetería (Amazon, Mercado Libre, etc.).'
         }
       ],
-      tip: 'Puedes cambiar de perfil en cualquier momento tocando "Cerrar Sesión" en la esquina superior derecha para volver al menú de entrada.'
+      tip: 'Puedes alternar rápidamente entre roles utilizando el menú de hamburguesa en la esquina superior izquierda o el botón "Cambiar Rol".'
     },
     {
       id: 'step-2',
-      category: 'residencias',
-      title: '2. Registro de Subdivisiones y Residencias',
-      icon: <Home className="w-5 h-5 text-amber-500" />,
-      tag: 'Gestión Residencial',
-      description: 'Alta de condominios, clústeres, privadas o colonias que serán controladas.',
+      category: 'propiedades',
+      title: '2. Estructura Inmobiliaria y Catálogo de Residentes',
+      icon: <Building2 className="w-5 h-5 text-blue-400" />,
+      tag: 'Gestión de Unidades',
+      description: 'Configura la distribución física del condominio (Torres, Secciones, Lotes) y vincula a los residentes y personal.',
       points: [
         {
-          title: 'Acceder al Módulo',
-          text: 'Ve al menú lateral izquierdo (icono de hamburguesa) y selecciona "Registro de Residencia".'
+          title: 'Alta de Torres, Manzanas o Lotes',
+          text: 'En la pestaña "1. Comunidad & Propiedades", registra la estructura seleccionando el tipo (Torre, Manzana, Lote, Cluster), asigna el nombre y la cantidad de departamentos o casas.'
         },
         {
-          title: 'Llenar los Datos',
-          text: 'Presiona "Registrar Nueva Residencia". Escribe el nombre de la privada (ej. "Lomas del Sol") y el nombre del Administrador asignado para ese desarrollo residencial.'
+          title: 'Padrón de Residentes',
+          text: 'Registra a propietarios e inquilinos asignándoles su unidad específica. El sistema monitoreará automáticamente su estatus de pago (Al día ✓ o Moroso ⚠).'
         },
         {
-          title: 'Creación de Cuentas Automáticas',
-          text: '¡Magia! Al registrar una residencia, el sistema auto-genera e instala al instante una cuenta de Administrador de Residencia y una cuenta de Oficial de Caseta con contraseñas seguras y teléfonos de guardia asignados.'
+          title: 'Personal Operativo y de Caseta',
+          text: 'Registra a los guardias de seguridad, técnicos de mantenimiento y personal de limpieza con sus respectivos turnos (Matutino, Vespertino, Nocturno, 24x24).'
         }
       ],
-      tip: 'Esto evita que configures manualmente las contraseñas para los guardias de cada caseta nueva. ¡Todo se autoconfigura!'
+      tip: 'Al registrar una unidad con formato claro (ej. "Torre A - Depto 102"), los módulos de conciliación y caseta identificarán automáticamente las referencias de pago y visitas.'
     },
     {
       id: 'step-3',
-      category: 'personas',
-      title: '3. Alta de Residentes y Empleados',
-      icon: <Users className="w-5 h-5 text-blue-500" />,
-      tag: 'Control de Personal',
-      description: 'Registro de los habitantes de un condominio y del personal de seguridad.',
+      category: 'finanzas',
+      title: '3. Finanzas, Emisión de Cuotas y Cobranza',
+      icon: <DollarSign className="w-5 h-5 text-emerald-400" />,
+      tag: 'Control Financiero',
+      description: 'Emisión de cargos ordinarios y extraordinarios, estados de cuenta y monitoreo de cartera vencida.',
       points: [
         {
-          title: 'Registrar un Residente',
-          text: 'Ve al módulo "Registro de Residente" desde el menú lateral. Elige la subdivisión a la que pertenece y coloca su teléfono de contacto y correo electrónico.'
+          title: 'Emisión de Cuotas Comunales',
+          text: 'En la pestaña "2. Finanzas & Cobranza", utiliza el formulario "Emitir Nueva Cuota". Selecciona la unidad, nombre del residente, concepto (ej. Mantenimiento mensual), monto y fecha límite de pago.'
         },
         {
-          title: 'Alta de Empleados y Guardias',
-          text: 'En el módulo "Privilegios y Roles", el Administrador General puede dar de alta nuevos directores, supervisores y oficiales capturando su nombre, usuario y teléfono WhatsApp.'
+          title: 'Seguimiento de Pagos y Filtros',
+          text: 'Filtra las cuotas por estatus (Todos, Pagado, Pendiente, Vencido). Los residentes con pagos vencidos son etiquetados automáticamente como morosos en todo el sistema.'
+        },
+        {
+          title: 'Recepción de Pagos y Pasarela',
+          text: 'Los residentes pueden abonar con tarjeta de crédito/débito o transferencia SPEI. Como administrador puedes registrar el pago manual o usar la pasarela integrada.'
+        },
+        {
+          title: 'Emisión de Estados de Cuenta Oficiales',
+          text: 'Presiona el botón "Estado 📄" en cualquier registro para visualizar e imprimir el comprobante detallado con código QR y desglose de recargos.'
         }
       ],
-      tip: 'Asegúrate de colocar números telefónicos válidos de 10 dígitos (ej. 5512345678) para que el envío automatizado de mensajes de WhatsApp funcione perfectamente.'
+      tip: 'Mantén las fechas de vencimiento al día. El sistema calcula automáticamente el recargo por mora según las reglas configuradas.'
     },
     {
       id: 'step-4',
-      category: 'whatsapp',
-      title: '4. Envío Automatizado por WhatsApp',
-      icon: <MessageSquare className="w-5 h-5 text-emerald-500" />,
-      tag: 'Notificaciones Instantáneas',
-      description: 'Cómo despachar las credenciales de los nuevos operarios directo a su celular.',
+      category: 'conciliacion',
+      title: '4. Módulo de Conciliación Bancaria (SPEI / Depósitos)',
+      icon: <Landmark className="w-5 h-5 text-purple-400" />,
+      tag: 'Finanzas Automatizadas',
+      description: 'Aprende paso a paso cómo cruzar los extractos bancarios con los saldos de los residentes para conciliar cuentas en segundos.',
       points: [
         {
-          title: 'Funcionalidad de WhatsApp Automática',
-          text: 'Al terminar de registrar un empleado en "Privilegios y Roles", el sistema creará su perfil y automáticamente intentará abrir una pestaña de WhatsApp Web con un mensaje ya redactado conteniendo su usuario, contraseña y la URL del sistema.'
+          title: 'Paso 1: Recepción del Movimiento Bancario',
+          text: 'Accede a "3. Conciliación Bancaria". Verás la lista de movimientos registrados en la cuenta bancaria del condominio (fecha, concepto bancario, referencia SPEI y monto en pesos).'
         },
         {
-          title: 'Soporte de Bloqueo de Ventanas Emergentes',
-          text: 'Si el navegador web o iframe bloquea el popup automático, aparecerá un cuadro amarillo con un botón verde que dice "Enviar por WhatsApp 💬". Presiónalo para abrir el chat de manera directa.'
+          title: 'Paso 2: Registro Manual o Importación de Extracto',
+          text: 'Para agregar un nuevo depósito, utiliza el formulario superior "Registrar Movimiento Bancario". Captura la referencia del banco (ej. SPEI-88210), el concepto, el monto exacto y selecciona la unidad sugerida.'
         },
         {
-          title: 'Copiar Mensaje Compartible',
-          text: 'También cuentas con un botón de "Copiar Mensaje". Así puedes copiar el contenido de las credenciales al portapapeles y mandarlo libremente por correo u otra red social.'
+          title: 'Paso 3: Auto-Conciliación Inteligente',
+          text: 'Presiona el botón "Auto-Conciliar por Referencia ⚡". El algoritmo cruzará las claves de rastreo y montos con los adeudos pendientes, liquidando automáticamente los que coincidan.'
+        },
+        {
+          title: 'Paso 4: Conciliación Manual Unitaria',
+          text: 'En caso de transferencias sin referencia clara, selecciona en la tabla la unidad correspondiente mediante el menú desplegable y presiona "Conciliar Pago ✓". El sistema cambiará el estatus a "Conciliado", liquidará la cuota en el módulo de pagos y emitirá un folio oficial de recibo.'
+        },
+        {
+          title: 'Paso 5: Reversión y Exportación',
+          text: 'Si cometiste un error, presiona "Revertir ↺" para desconciliar el pago. Además, puedes presionar "Exportar a Excel / CSV 📊" para entregar el reporte financiero al Comité de Vigilancia.'
         }
       ],
-      tip: 'Es sumamente útil para que el guardia reciba sus contraseñas en su teléfono móvil sin que tengas que transcribir nada.'
+      tip: 'Solicita a los residentes colocar siempre el número de su departamento (ej. "D-102") en el concepto de su transferencia SPEI para que la auto-conciliación sea 100% inmediata.'
     },
     {
       id: 'step-5',
-      category: 'caseta',
-      title: '5. Control de Accesos y Escaneo (Caseta)',
-      icon: <ScanLine className="w-5 h-5 text-red-400" />,
-      tag: 'Operación Diaria',
-      description: 'Guía paso a paso para los guardias de seguridad en caseta para escanear pases QR.',
+      category: 'amenidades',
+      title: '5. Reservación de Amenidades y Control de Aforos',
+      icon: <Calendar className="w-5 h-5 text-amber-400" />,
+      tag: 'Operación & Convivencia',
+      description: 'Gestión inteligente de áreas comunes (Alberca, Salón de Eventos, Asadores, Canchas).',
       points: [
         {
-          title: 'Escanear Pase QR',
-          text: 'El guardia de turno ingresa a "Acceso de Residente". Verás la cámara activa apuntando a lector de pases.'
+          title: 'Calendario de Disponibilidad',
+          text: 'Los residentes y el administrador pueden seleccionar el espacio, la fecha y el horario deseado. El sistema bloquea empalmes de reservas de forma automática.'
         },
         {
-          title: 'Escanear Código',
-          text: 'El visitante muestra el código QR desde su celular o impreso. El escáner lo lee en milisegundos.'
+          title: 'Bloqueo Automático a Morosos',
+          text: 'Si una unidad presenta adeudos pendientes o vencidos, el sistema restringe automáticamente la reserva de áreas comunes hasta que regularice su situación contable.'
         },
         {
-          title: 'Validación en Pantalla',
-          text: 'Aparece la foto del visitante y un marco de color indicando el estado del pase:\n🟢 VERDE (Pase Activo y Autorizado) - Permite el paso.\n🔴 ROJO (Pase Vencido, Ya Usado o Inexistente) - Acceso Denegado.'
+          title: 'Aprobación y Confirmación',
+          text: 'El administrador puede validar o confirmar las reservas, generando un pase de uso con términos y condiciones del reglamento del condominio.'
         }
       ],
-      tip: 'El escáner de la caseta procesa y valida los pases en tiempo real de forma segura y veloz.'
+      tip: 'Puedes configurar cuotas de recuperación o depósitos en garantía para el salón de eventos en el catálogo de amenidades.'
+    },
+    {
+      id: 'step-6',
+      category: 'caseta',
+      title: '6. Seguridad en Caseta, Pases QR y Paquetería',
+      icon: <ScanLine className="w-5 h-5 text-emerald-400" />,
+      tag: 'Seguridad 24/7',
+      description: 'Flujo operativo para guardias de caseta: validación de pases QR, control de accesos y encomiendas.',
+      points: [
+        {
+          title: 'Pases de Visita QR desde la App',
+          text: 'El residente genera un código QR temporal con el nombre del visitante y placas vehiculares, y lo comparte con un solo clic por WhatsApp.'
+        },
+        {
+          title: 'Escaneo y Verificación en Caseta',
+          text: 'El oficial de guardia escanea el QR del visitante. La pantalla muestra en verde el acceso autorizado o alerta en rojo si el pase ha expirado.'
+        },
+        {
+          title: 'Alerta de Restricción de Morosidad',
+          text: 'Si el departamento visitado tiene cuotas vencidas, el oficial verá una alerta especial en pantalla para solicitar registro adicional según el reglamento.'
+        },
+        {
+          title: 'Recepción de Paquetería',
+          text: 'El guardia registra los paquetes que llegan de paqueterías (DHL, FedEx, Amazon), notificando al residente y registrando la firma de entrega.'
+        }
+      ],
+      tip: 'Los guardias pueden registrar incidencias y cambios de turno en la "Bitácora Digital" para mantener un historial auditable sin papel.'
+    },
+    {
+      id: 'step-7',
+      category: 'comunicacion',
+      title: '7. Comunicación, Avisos y Votaciones de Asamblea',
+      icon: <MessageSquare className="w-5 h-5 text-indigo-400" />,
+      tag: 'Comunidad & Acuerdos',
+      description: 'Muro de noticias oficial, asambleas virtuales con votación electrónica y actas digitales.',
+      points: [
+        {
+          title: 'Muro de Boletines y Avisos',
+          text: 'Publica comunicados oficiales (mantenimientos programados, avisos de seguridad, avisos de corte de agua) visibles al instante en la app de los condóminos.'
+        },
+        {
+          title: 'Encuestas y Votaciones Electrónicas',
+          text: 'Somete a votación proyectos y mejoras (ej. pintura de fachadas, automatización de portones). El sistema contabiliza los votos en tiempo real.'
+        },
+        {
+          title: 'Bóveda de Actas y Documentos',
+          text: 'El Comité y la Administración pueden subir contratos con proveedores, reglamentos interiores y actas firmadas digitalmente para consulta transparente.'
+        }
+      ],
+      tip: 'Utiliza las votaciones electrónicas para medir la aprobación previa de presupuestos extraordinarios antes de convocar a asamblea presencial.'
     }
   ];
 
@@ -153,182 +234,201 @@ export const ManualUsuario: React.FC<ManualUsuarioProps> = ({ onGoToTab }) => {
   });
 
   return (
-    <div id="manual-usuario-module" className="bg-[#1A1A1E] border border-[#3e3e42] rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden font-sans">
+    <div id="manual-usuario-module" className="bg-[#1E1E22] border border-[#2d2d32] rounded-3xl p-5 sm:p-7 shadow-2xl relative overflow-hidden font-sans text-left animate-fade-in">
       
       {/* Decorative Glow */}
-      <div className="absolute top-0 right-0 w-64 h-64 bg-red-500/5 blur-3xl rounded-full pointer-events-none"></div>
+      <div className="absolute top-0 right-0 w-80 h-80 bg-purple-600/10 blur-3xl rounded-full pointer-events-none"></div>
       
       {/* Module Title */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-6 border-b border-[#3e3e42] gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-red-650/15 border border-red-500/25 flex items-center justify-center text-red-500">
-            <BookOpen className="w-5.5 h-5.5" />
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-5 border-b border-[#2d2d32] gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-2xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400 shadow-inner">
+            <BookOpen className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-xl font-extrabold text-white tracking-tight">Manual del Usuario</h2>
-            <p className="text-xs text-slate-400 mt-1">Guía paso a paso simplificada para la administración y control de accesos CNLS.</p>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg sm:text-xl font-black text-white tracking-tight">Manual del Usuario del Administrador</h2>
+              <span className="px-2 py-0.5 text-[9px] bg-purple-500/20 text-purple-300 font-extrabold uppercase rounded-full border border-purple-500/30 font-mono">
+                Activo v2.4
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Guía completa, interactiva y paso a paso para la operación eficiente del sistema de administración de condominios.
+            </p>
           </div>
         </div>
         
-        {/* Quick action to go to a quick help panel */}
-        <div className="flex items-center gap-2 text-[10.5px] bg-[#242429] hover:bg-zinc-800 text-amber-400 font-mono font-bold px-3 py-1.5 rounded-lg border border-amber-500/10">
-          <Sparkles className="w-3.5 h-3.5" />
-          <span>¡LISTO PARA CLIENTES!</span>
+        {/* Quick action buttons */}
+        <div className="flex items-center gap-2">
+          {onGoToTab && (
+            <button
+              onClick={() => onGoToTab('conciliacion')}
+              className="flex items-center gap-1.5 text-xs bg-purple-600 hover:bg-purple-500 text-white font-bold px-3.5 py-2 rounded-xl transition cursor-pointer shadow-lg shadow-purple-900/30"
+            >
+              <Landmark className="w-3.5 h-3.5" />
+              <span>Ir a Conciliación Bancaria →</span>
+            </button>
+          )}
         </div>
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="mt-6 flex flex-col md:flex-row gap-4 items-center">
+      <div className="mt-6 flex flex-col md:flex-row gap-3 items-center">
         <div className="relative w-full md:flex-1">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
           <input
             id="manual-search-input"
             type="text"
-            placeholder="Buscar tema (ej. WhatsApp, residencias, guardia)..."
+            placeholder="Buscar tema (ej. conciliación bancaria, cuotas, pases QR, torres)..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-[#141418] border border-[#3e3e42] text-white text-xs sm:text-sm rounded-xl focus:border-red-500 focus:outline-hidden font-sans placeholder:text-slate-500"
+            className="w-full pl-10 pr-4 py-2.5 bg-[#141417] border border-[#2d2d32] text-white text-xs sm:text-sm rounded-xl focus:border-purple-500 focus:outline-hidden font-sans placeholder:text-slate-500"
           />
         </div>
         
         {/* Category Filters Pill Box */}
         <div className="flex flex-wrap gap-1.5 self-start md:self-auto">
-          <button
-            onClick={() => setActiveCategory('all')}
-            className={`px-3 py-1.5 rounded-lg text-[10.5px] font-bold transition uppercase ${
-              activeCategory === 'all' 
-                ? 'bg-red-600 text-white shadow-md' 
-                : 'bg-[#242429] text-slate-400 hover:text-white border border-[#3e3e42]'
-            }`}
-          >
-            Todos
-          </button>
-          <button
-            onClick={() => setActiveCategory('inicio')}
-            className={`px-3 py-1.5 rounded-lg text-[10.5px] font-bold transition uppercase ${
-              activeCategory === 'inicio' 
-                ? 'bg-red-600 text-white shadow-md' 
-                : 'bg-[#242429] text-slate-400 hover:text-white border border-[#3e3e42]'
-            }`}
-          >
-            Acceso
-          </button>
-          <button
-            onClick={() => setActiveCategory('residencias')}
-            className={`px-3 py-1.5 rounded-lg text-[10.5px] font-bold transition uppercase ${
-              activeCategory === 'residencias' 
-                ? 'bg-red-600 text-white shadow-md' 
-                : 'bg-[#242429] text-slate-400 hover:text-white border border-[#3e3e42]'
-            }`}
-          >
-            Subdivisiones
-          </button>
-          <button
-            onClick={() => setActiveCategory('personas')}
-            className={`px-3 py-1.5 rounded-lg text-[10.5px] font-bold transition uppercase ${
-              activeCategory === 'personas' 
-                ? 'bg-red-600 text-white shadow-md' 
-                : 'bg-[#242429] text-slate-400 hover:text-white border border-[#3e3e42]'
-            }`}
-          >
-            Residentes
-          </button>
-          <button
-            onClick={() => setActiveCategory('whatsapp')}
-            className={`px-3 py-1.5 rounded-lg text-[10.5px] font-bold transition uppercase ${
-              activeCategory === 'whatsapp' 
-                ? 'bg-red-600 text-white shadow-md' 
-                : 'bg-[#242429] text-slate-400 hover:text-white border border-[#3e3e42]'
-            }`}
-          >
-            WhatsApp
-          </button>
+          {[
+            { id: 'all', label: 'Todos los Temas' },
+            { id: 'roles', label: '1. Roles' },
+            { id: 'propiedades', label: '2. Propiedades' },
+            { id: 'finanzas', label: '3. Finanzas' },
+            { id: 'conciliacion', label: '4. Conciliación SPEI' },
+            { id: 'amenidades', label: '5. Amenidades' },
+            { id: 'caseta', label: '6. Caseta & QR' },
+            { id: 'comunicacion', label: '7. Comunicación' }
+          ].map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() => setActiveCategory(cat.id as any)}
+              className={`px-3 py-1.5 rounded-xl text-[10.5px] font-bold transition uppercase cursor-pointer ${
+                activeCategory === cat.id 
+                  ? 'bg-purple-600 text-white shadow-md' 
+                  : 'bg-[#141417] text-slate-400 hover:text-white border border-[#2d2d32]'
+              }`}
+            >
+              {cat.label}
+            </button>
+          ))}
         </div>
       </div>
 
       {/* Manual Content Steps Grid */}
-      <div className="mt-8 space-y-6">
+      <div className="mt-6 space-y-4">
         {filteredSteps.length > 0 ? (
           filteredSteps.map((step) => (
             <div 
               key={step.id} 
-              className="bg-[#1F1F24] border border-[#3e3e42] hover:border-slate-500/40 rounded-2xl p-5 sm:p-6 transition-all duration-200"
+              className="bg-[#141417] border border-[#232326] hover:border-purple-500/40 rounded-2xl p-5 sm:p-6 transition-all duration-200"
             >
               {/* Step Header */}
-              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-zinc-850 border border-[#3e3e42] flex items-center justify-center">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-[#1E1E22] border border-[#2d2d32] flex items-center justify-center">
                     {step.icon}
                   </div>
-                  <h3 className="text-sm sm:text-base font-extrabold text-white uppercase tracking-tight">
+                  <h3 className="text-sm sm:text-base font-extrabold text-white tracking-tight">
                     {step.title}
                   </h3>
                 </div>
-                <span className="text-[10px] uppercase font-bold px-2.5 py-0.5 bg-red-650/15 text-red-400 rounded-md border border-red-500/10">
+                <span className="text-[10px] uppercase font-mono font-bold px-2.5 py-0.5 bg-purple-500/15 text-purple-300 rounded-md border border-purple-500/20">
                   {step.tag}
                 </span>
               </div>
 
-              <p className="text-xs text-slate-300 leading-relaxed mb-5 font-sans">
+              <p className="text-xs text-slate-300 leading-relaxed mb-4 font-sans">
                 {step.description}
               </p>
 
               {/* Step Key Points */}
-              <div className="space-y-4 border-l-2 border-red-655 pl-4 ml-2">
+              <div className="space-y-3 border-l-2 border-purple-500/50 pl-4 ml-1">
                 {step.points.map((point, pIndex) => (
                   <div key={pIndex} className="relative">
-                    {/* Tiny bullet circle */}
-                    <div className="absolute -left-[21px] top-1.5 w-2 h-2 rounded-full bg-red-500"></div>
+                    {/* Bullet marker */}
+                    <div className="absolute -left-[21px] top-1.5 w-2 h-2 rounded-full bg-purple-400"></div>
                     
-                    <h4 className="text-xs font-extrabold text-slate-200 flex items-center gap-1.5">
+                    <h4 className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
                       {point.title}
                     </h4>
-                    <p className="text-[11px] sm:text-xs text-slate-400 leading-relaxed mt-1 font-sans whitespace-pre-line">
+                    <p className="text-[11px] sm:text-xs text-slate-400 leading-relaxed mt-0.5 font-sans">
                       {point.text}
                     </p>
                   </div>
                 ))}
               </div>
 
-              {/* Tip Pro box */}
-              <div className="mt-5 p-3.5 bg-amber-500/5 hover:bg-amber-500/10 border border-amber-500/15 rounded-xl flex gap-3 transition">
-                <HelpCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                <p className="text-[11px] text-amber-200 font-sans leading-normal">
-                  <strong>💡 Pro-Tip:</strong> {step.tip}
+              {/* Pro-Tip Box */}
+              <div className="mt-4 p-3.5 bg-purple-950/20 border border-purple-500/20 rounded-xl flex items-start gap-3">
+                <Sparkles className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+                <p className="text-[11px] text-purple-200 font-sans leading-relaxed">
+                  <strong>💡 Recomendación Operativa:</strong> {step.tip}
                 </p>
               </div>
+
+              {/* Special shortcut button for Conciliación Bancaria step */}
+              {step.category === 'conciliacion' && onGoToTab && (
+                <div className="mt-3 pt-3 border-t border-[#232326] flex justify-end">
+                  <button
+                    onClick={() => onGoToTab('conciliacion')}
+                    className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow"
+                  >
+                    <Landmark className="w-3.5 h-3.5" /> Abrir Módulo de Conciliación Bancaria Ahora
+                  </button>
+                </div>
+              )}
 
             </div>
           ))
         ) : (
-          <div className="text-center py-12 bg-[#1F1F24] rounded-2xl border border-dashed border-[#3e3e42]">
+          <div className="text-center py-12 bg-[#141417] rounded-2xl border border-dashed border-[#2d2d32]">
             <HelpCircle className="w-10 h-10 text-slate-500 mx-auto mb-3" />
             <p className="text-xs text-slate-300">No encontramos resultados para tu búsqueda.</p>
             <button 
               onClick={() => { setSearchTerm(''); setActiveCategory('all'); }} 
-              className="mt-3 text-xs text-red-500 hover:underline font-bold"
+              className="mt-3 text-xs text-purple-400 hover:underline font-bold"
             >
-              Limpiar filtros y buscar de nuevo
+              Limpiar filtros y ver todos los temas
             </button>
           </div>
         )}
       </div>
 
-      {/* Cheat Sheet Summary */}
-      <div className="mt-10 bg-[#121215] border border-[#2e2e34] rounded-2.5xl p-6 relative">
-        <div className="flex items-center gap-2 mb-4">
-          <FileText className="w-4.5 h-4.5 text-blue-400" />
-          <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider">Acordeón de Operación Rápida</h3>
+      {/* Quick Summary Reference Card */}
+      <div className="mt-8 bg-[#141417] border border-[#2d2d32] rounded-2xl p-5 relative">
+        <div className="flex items-center gap-2 mb-3">
+          <FileText className="w-4 h-4 text-purple-400" />
+          <h3 className="text-xs font-black uppercase text-slate-300 tracking-wider font-mono">
+            Flujo Rápido de Operación Diaria para el Administrador
+          </h3>
         </div>
-        <div className="text-[11px] text-slate-405 leading-relaxed space-y-2.5 font-mono">
-          <p>🏁 <b>Paso 1</b>: Entra con usuario <span className="text-slate-300 font-bold">admin</span> contraseña <span className="text-red-400 font-bold">Admin_123</span>.</p>
-          <p>🏡 <b>Paso 2</b>: Registra la privada o condominio en <b>"Registro de Residencia"</b>.</p>
-          <p>👮 <b>Paso 3</b>: Observa las claves generadas o agrega oficiales de caseta en <b>"Privilegios y Roles"</b>.</p>
-          <p>🌱 <b>Paso 4</b>: Envía automáticamente las credenciales por <b>WhatsApp instantáneo</b>.</p>
-          <p>📸 <b>Paso 5</b>: El guardia usa su clave en la caseta para entrar con rol Supervisor y escanea QR con la cámara.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+          <div className="p-3 bg-[#1E1E22] border border-[#2d2d32] rounded-xl space-y-1">
+            <span className="text-[10px] font-bold text-purple-400 font-mono">Paso 1: Al iniciar el mes</span>
+            <p className="font-bold text-white text-xs">Generar Cuotas</p>
+            <p className="text-[10.5px] text-slate-400">Emite los cargos del mes por torre o departamento con fecha de vencimiento.</p>
+          </div>
+
+          <div className="p-3 bg-[#1E1E22] border border-[#2d2d32] rounded-2xl rounded-xl space-y-1">
+            <span className="text-[10px] font-bold text-emerald-400 font-mono">Paso 2: A diario</span>
+            <p className="font-bold text-white text-xs">Conciliar SPEI</p>
+            <p className="text-[10.5px] text-slate-400">Cruza los depósitos bancarios recibidos con las unidades para acreditar pagos.</p>
+          </div>
+
+          <div className="p-3 bg-[#1E1E22] border border-[#2d2d32] rounded-xl space-y-1">
+            <span className="text-[10px] font-bold text-amber-400 font-mono">Paso 3: Al corte de fecha</span>
+            <p className="font-bold text-white text-xs">Supervisar Morosos</p>
+            <p className="text-[10.5px] text-slate-400">El sistema restringe pases de visita y reservas de amenidades a unidades en mora.</p>
+          </div>
+
+          <div className="p-3 bg-[#1E1E22] border border-[#2d2d32] rounded-xl space-y-1">
+            <span className="text-[10px] font-bold text-blue-400 font-mono">Paso 4: Fin de mes</span>
+            <p className="font-bold text-white text-xs">Reportes a Comité</p>
+            <p className="text-[10.5px] text-slate-400">Exporta a Excel o PDF la balanza de ingresos, egresos y conciliación bancaria.</p>
+          </div>
         </div>
       </div>
 
     </div>
   );
 };
+

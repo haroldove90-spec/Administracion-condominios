@@ -1,6 +1,6 @@
 {
   "name": "Administracion de condominios",
-  "description": "Sistema integral de Administración de Condominios con gestión de finanzas, cobro de cuotas, reservación de amenidades, votaciones, tickets y comunicación vecinal.",
+  "description": "Sistema integral de Administración de Condominios con gestión de finanzas, conciliación bancaria SPEI, control de cuotas, manual de usuario interactivo, reservación de amenidades y control de accesos.",
   "requestFramePermissions": [
     "camera",
     "microphone",
