@@ -16,6 +16,7 @@ import { auth, IS_FIREBASE_DUMMY } from './firebase';
 import { dbService } from './services/dbService';
 import { SystemUserRole, SystemRole } from './types';
 import CondominiosDashboard from './components/CondominiosDashboard';
+import LoginView from './components/LoginView';
 
 export const ENABLE_CONDOMINIOS_MODULE = true;
 
@@ -31,6 +32,11 @@ export default function App() {
   });
 
   const [userRole, setUserRole] = useState<SystemRole | null>(() => {
+    // Check if explicitly logged out
+    const loggedOut = localStorage.getItem('cnls_logged_out');
+    if (loggedOut === 'true') {
+      return null;
+    }
     const saved = localStorage.getItem('cnls_user_role');
     try {
       if (saved) {
@@ -43,6 +49,8 @@ export default function App() {
     }
   });
 
+  const [initialSubSection, setInitialSubSection] = useState<'inicio' | 'superadmin' | 'admininmobiliaria' | 'comite' | 'residente' | 'guardia'>('inicio');
+  const [loggedOutNotice, setLoggedOutNotice] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
 
   // Online / Offline Internet Connectivity State Enforcer
@@ -76,6 +84,12 @@ export default function App() {
       const initDummyRole = async () => {
         setLoading(true);
         try {
+          // If the user explicitly clicked "Cerrar Sesión", do not re-login automatically
+          if (localStorage.getItem('cnls_logged_out') === 'true') {
+            setUserRole(null);
+            return;
+          }
+
           const savedUserRoleJson = localStorage.getItem('cnls_user_role');
           if (savedUserRoleJson) {
             try {
@@ -146,7 +160,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // User Signs Out
+  // User Signs Out - Cleans state and shows login screen
   const handleSignOut = async () => {
     try {
       if (!IS_FIREBASE_DUMMY) {
@@ -159,7 +173,18 @@ export default function App() {
       setUserRole(null);
       localStorage.removeItem('cnls_user_role');
       localStorage.removeItem('cnls_auth_user');
+      localStorage.setItem('cnls_logged_out', 'true');
+      setLoggedOutNotice(true);
     }
+  };
+
+  // Login handler
+  const handleLogin = (role: SystemRole, targetSubSection?: 'inicio' | 'superadmin' | 'admininmobiliaria' | 'comite' | 'residente' | 'guardia') => {
+    localStorage.removeItem('cnls_logged_out');
+    localStorage.setItem('cnls_user_role', JSON.stringify(role));
+    setUserRole(role);
+    setInitialSubSection(targetSubSection || 'inicio');
+    setLoggedOutNotice(false);
   };
 
   if (loading) {
@@ -171,17 +196,22 @@ export default function App() {
     );
   }
 
+  // If user signed out or is not logged in, render LoginView
+  if (!userRole) {
+    return (
+      <LoginView 
+        onLogin={handleLogin}
+        loggedOutNotice={loggedOutNotice}
+      />
+    );
+  }
+
   return (
     <div id="integrated-app-root" className="min-h-screen bg-[#0A0A0A] text-slate-200 font-sans flex flex-col selection:bg-purple-650/30">
       {/* Condominios System as primary root interface */}
       <CondominiosDashboard 
-        currentUser={userRole || {
-          uid: 'admin-condo-uid',
-          name: 'Harold Anguiano (Administrador)',
-          email: 'harold.anguiano@condominios.mx',
-          username: 'harold.anguiano',
-          role: 'admin'
-        }}
+        currentUser={userRole}
+        initialSubSection={initialSubSection}
         onSignOut={handleSignOut}
       />
 

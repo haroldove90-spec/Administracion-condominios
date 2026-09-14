@@ -285,7 +285,7 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
   const [adminCondoTab, setAdminCondoTab] = useState<'comunidad' | 'finanzas' | 'conciliacion' | 'facturacion' | 'operacion' | 'comunicacion' | 'multas' | 'vehiculos' | 'asamblea' | 'manual'>('comunidad');
   const [isReporteAsambleaOpen, setIsReporteAsambleaOpen] = useState<boolean>(false);
   const [comiteTab, setComiteTab] = useState<'auditoria' | 'aprobaciones' | 'actas'>('auditoria');
-  const [residenteTab, setResidenteTab] = useState<'finanzas' | 'accesos' | 'amenidades' | 'comunicacion'>('finanzas');
+  const [residenteTab, setResidenteTab] = useState<'finanzas' | 'accesos' | 'amenidades' | 'comunicacion'>('accesos');
   const [guardiaTab, setGuardiaTab] = useState<'accesos' | 'paqueteria' | 'bitacora'>('accesos');
   const [superAdminTab, setSuperAdminTab] = useState<'clientes' | 'finanzas' | 'soporte'>('clientes');
   const [isNavOpen, setIsNavOpen] = useState<boolean>(false);
@@ -1304,9 +1304,57 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
   // --- 2. SEGURIDAD & ACCESOS STATE ---
   // QR Invitations generator
   const [visitorName, setVisitorName] = useState('');
-  const [visitorCondo, setVisitorCondo] = useState('');
+  const [visitorCondo, setVisitorCondo] = useState('Casa 105');
   const [visitorPlate, setVisitorPlate] = useState('');
+  const [visitorAccessType, setVisitorAccessType] = useState<'visita' | 'delivery' | 'proveedor' | 'mudanza'>('visita');
+  const [visitorValidity, setVisitorValidity] = useState<'1_uso' | '24_horas' | '3_dias' | '7_dias'>('24_horas');
   const [generatedInviteQR, setGeneratedInviteQR] = useState<string | null>(null);
+  const [qrTokenCopied, setQrTokenCopied] = useState<boolean>(false);
+  const [residentPassesList, setResidentPassesList] = useState<Array<{
+    id: string;
+    visitorName: string;
+    condo: string;
+    type: string;
+    plate?: string;
+    token: string;
+    validUntil: string;
+    status: 'valido' | 'usado' | 'revocado';
+    createdAt: string;
+  }>>(() => [
+    {
+      id: 'pass-1',
+      visitorName: 'Ing. Roberto Martínez',
+      condo: 'Casa 105',
+      type: 'Técnico / Proveedor',
+      plate: 'JNY-4921',
+      token: 'CNLS-PASS-C105-9921',
+      validUntil: 'Hoy 23:59',
+      status: 'valido',
+      createdAt: '2026-07-20 10:15'
+    },
+    {
+      id: 'pass-2',
+      visitorName: 'Familia Morales',
+      condo: 'Casa 105',
+      type: 'Visita Familiar',
+      plate: 'PGB-7741',
+      token: 'CNLS-PASS-C105-8834',
+      validUntil: '2026-07-22',
+      status: 'valido',
+      createdAt: '2026-07-19 18:30'
+    },
+    {
+      id: 'pass-3',
+      visitorName: 'Repartidor Uber Eats',
+      condo: 'Casa 105',
+      type: 'Delivery / Comida',
+      plate: 'Moto 44-MN',
+      token: 'CNLS-PASS-C105-3310',
+      validUntil: '1 solo acceso',
+      status: 'usado',
+      createdAt: '2026-07-19 14:10'
+    }
+  ]);
 
   // Biometrics
   const [biometricScanning, setBiometricScanning] = useState(false);
@@ -2463,9 +2511,39 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
   // Generate Invite QR
   const handleGenerateInvite = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!visitorName || !visitorCondo) return;
-    const qrcodePayload = `PASSPORT-CNLS-INVITE-${visitorCondo.replace(/\s+/g, '')}-${Date.now()}`;
-    setGeneratedInviteQR(qrcodePayload);
+    if (!visitorName.trim() || !visitorCondo.trim()) return;
+    const token = `CNLS-QR-${visitorCondo.replace(/\s+/g, '')}-${Date.now().toString().slice(-5)}`;
+    setGeneratedInviteQR(token);
+
+    const typeLabel = 
+      visitorAccessType === 'visita' ? 'Visita Social / Familiar' :
+      visitorAccessType === 'delivery' ? 'Paquetería & Delivery' :
+      visitorAccessType === 'proveedor' ? 'Técnico / Servicio' : 'Mudanza / Contratista';
+
+    const validityLabel = 
+      visitorValidity === '1_uso' ? '1 solo acceso (Un solo uso)' :
+      visitorValidity === '24_horas' ? '24 Horas (Pase del día)' :
+      visitorValidity === '3_dias' ? '3 Días (Fin de semana)' : '7 Días (Semanal)';
+
+    const newPassItem = {
+      id: `pass-${Date.now()}`,
+      visitorName: visitorName.trim(),
+      condo: visitorCondo.trim(),
+      type: typeLabel,
+      plate: visitorPlate.trim() || 'Sin vehículo',
+      token,
+      validUntil: validityLabel,
+      status: 'valido' as const,
+      createdAt: new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+    };
+
+    setResidentPassesList(prev => [newPassItem, ...prev]);
+    showSuccessBanner(`✓ Código QR generado exitosamente para ${visitorName.trim()}.`);
+  };
+
+  const handleRevokePass = (id: string) => {
+    setResidentPassesList(prev => prev.map(p => p.id === id ? { ...p, status: 'revocado' } : p));
+    showSuccessBanner('✓ Pase de acceso revocado correctamente.');
   };
 
   // Biometrics scan simulation
@@ -6415,282 +6493,706 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
                   Cambiar Rol ←
                 </button>
               </div>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* RESIDENT SUB-NAVIGATION TABS */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none border-b border-[#232328]">
+                <button
+                  type="button"
+                  onClick={() => setResidenteTab('accesos')}
+                  className={`px-4 py-2.5 rounded-xl text-xs font-black transition flex items-center gap-2 cursor-pointer shrink-0 border ${
+                    residenteTab === 'accesos'
+                      ? 'bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-950/50'
+                      : 'bg-[#1E1E22] text-slate-300 hover:bg-[#27272D] border-[#2d2d32]'
+                  }`}
+                >
+                  <QrCode className="w-4 h-4 text-emerald-400" />
+                  <span>1. Pases QR & Invitados (Crear Acceso)</span>
+                  <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 text-[9px] rounded font-mono font-bold">Activo</span>
+                </button>
 
-              {/* MODULE A: AMENITIES CALENDAR RESERVATION */}
-              <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-2xl p-5 space-y-4">
-                <div>
-                  <span className="text-[9px] font-bold text-purple-400 uppercase tracking-widest font-mono">Espacios Comunes</span>
-                  <h3 className="text-base font-black text-white mt-1">Reserva de Amenidades</h3>
-                  <p className="text-xs text-slate-450 mt-0.5">Calendario inteligente para apartar canchas, terrazas y salones.</p>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setResidenteTab('finanzas')}
+                  className={`px-4 py-2.5 rounded-xl text-xs font-black transition flex items-center gap-2 cursor-pointer shrink-0 border ${
+                    residenteTab === 'finanzas'
+                      ? 'bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-950/50'
+                      : 'bg-[#1E1E22] text-slate-300 hover:bg-[#27272D] border-[#2d2d32]'
+                  }`}
+                >
+                  <DollarSign className="w-4 h-4 text-emerald-400" />
+                  <span>2. Mis Cuotas & Pagos</span>
+                </button>
 
-                <form onSubmit={handleAddReservation} className="space-y-3 font-sans text-xs">
-                  <div>
-                    <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Elige la Amenidad</label>
-                    <select
-                      value={selectedAmenity}
-                      onChange={(e) => setSelectedAmenity(e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-hidden"
-                    >
-                      <option value="Salón de Eventos">Salón de Eventos (Cuota: $1,500)</option>
-                      <option value="Alberca & Terraza">Alberca & Terraza (Cuota: $500)</option>
-                      <option value="Cancha de Tenis">Cancha de Tenis (Cuota: Gratis)</option>
-                      <option value="Asadores Jardín">Asadores Jardín (Cuota: Gratis)</option>
-                    </select>
-                  </div>
+                <button
+                  type="button"
+                  onClick={() => setResidenteTab('amenidades')}
+                  className={`px-4 py-2.5 rounded-xl text-xs font-black transition flex items-center gap-2 cursor-pointer shrink-0 border ${
+                    residenteTab === 'amenidades'
+                      ? 'bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-950/50'
+                      : 'bg-[#1E1E22] text-slate-300 hover:bg-[#27272D] border-[#2d2d32]'
+                  }`}
+                >
+                  <Calendar className="w-4 h-4 text-purple-400" />
+                  <span>3. Reserva de Amenidades</span>
+                </button>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Fecha</label>
-                      <input
-                        type="date"
-                        required
-                        value={resvDate}
-                        onChange={(e) => setResvDate(e.target.value)}
-                        className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-hidden font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Horario</label>
-                      <select
-                        value={resvTimeSlot}
-                        onChange={(e) => setResvTimeSlot(e.target.value)}
-                        className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-hidden"
-                      >
-                        <option value="09:00 - 13:00">09:00 - 13:00</option>
-                        <option value="14:00 - 18:00">14:00 - 18:00</option>
-                        <option value="19:00 - 23:00">19:00 - 23:00</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Condómino</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Casa 102"
-                        value={resvCondo}
-                        onChange={(e) => setResvCondo(e.target.value)}
-                        className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-hidden"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Responsable</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Alejandro Ruiz"
-                        value={resvResident}
-                        onChange={(e) => setResvResident(e.target.value)}
-                        className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-hidden"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-1"
-                  >
-                    <Calendar className="w-3.5 h-3.5" /> Agendar Reserva
-                  </button>
-                </form>
-
-                {/* Reservation Log */}
-                <div className="pt-3 border-t border-[#232326] space-y-2">
-                  <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest font-mono">Reservaciones Registradas</span>
-                  {reservations.map(r => (
-                    <div key={r.id} className="p-2.5 bg-slate-950 border border-slate-900 rounded-xl text-left text-[10px] flex justify-between items-center">
-                      <div>
-                        <h4 className="font-bold text-slate-200">{r.amenityName}</h4>
-                        <p className="text-slate-400 font-sans mt-0.5">Resp: {r.resident} ({r.condo})</p>
-                        <p className="text-[8.5px] text-slate-500 font-mono mt-0.5">Fecha: {r.date} [{r.timeSlot}]</p>
-                      </div>
-                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider ${
-                        r.status === 'confirmado' 
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                          : 'bg-amber-500/10 text-amber-400 border border-amber-500/20 animate-pulse'
-                      }`}>
-                        {r.status}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setResidenteTab('comunicacion')}
+                  className={`px-4 py-2.5 rounded-xl text-xs font-black transition flex items-center gap-2 cursor-pointer shrink-0 border ${
+                    residenteTab === 'comunicacion'
+                      ? 'bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-950/50'
+                      : 'bg-[#1E1E22] text-slate-300 hover:bg-[#27272D] border-[#2d2d32]'
+                  }`}
+                >
+                  <MessageSquare className="w-4 h-4 text-amber-400" />
+                  <span>4. Avisos & Mesa de Ayuda</span>
+                </button>
               </div>
 
-              {/* MODULE B: HELPDESK TICKETS */}
-              <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-2xl p-5 space-y-4">
-                <div>
-                  <span className="text-[9px] font-bold text-rose-400 uppercase tracking-widest font-mono">Soporte Técnico</span>
-                  <h3 className="text-base font-black text-white mt-1">Mesa de Ayuda (Reporte de Fallas)</h3>
-                  <p className="text-xs text-slate-450 mt-0.5">Canal de atención ciudadana para reportar desperfectos en áreas públicas.</p>
-                </div>
-
-                <form onSubmit={handleAddTicket} className="space-y-2.5 font-sans text-xs">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Casa / Condo</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Casa 105"
-                        value={newTicketCondo}
-                        onChange={(e) => setNewTicketCondo(e.target.value)}
-                        className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-hidden"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Categoría</label>
-                      <select
-                        value={newTicketCategory}
-                        onChange={(e) => setNewTicketCategory(e.target.value)}
-                        className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-hidden"
-                      >
-                        <option value="Plomería">Plomería</option>
-                        <option value="Eléctrico">Eléctrico</option>
-                        <option value="Seguridad">Seguridad</option>
-                        <option value="Jardinería">Jardinería</option>
-                        <option value="Áreas Comunes">Áreas Comunes</option>
-                      </select>
+              {/* TAB 1: PASES QR & ACCESOS DE INVITADOS */}
+              {residenteTab === 'accesos' && (
+                <div className="space-y-6 animate-fade-in">
+                  {/* Module Welcome Banner */}
+                  <div className="p-4 bg-gradient-to-r from-blue-950/40 via-[#1E1E22] to-purple-950/30 border border-blue-500/30 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/40 flex items-center justify-center shrink-0 shadow-md">
+                        <QrCode className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 font-mono">
+                            Rol 4: Residente PWA
+                          </span>
+                          <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono">
+                            Módulo: Pases QR & Invitados
+                          </span>
+                        </div>
+                        <h3 className="text-base font-black text-white mt-1">Generador de Códigos QR de Acceso para Visitas</h3>
+                        <p className="text-xs text-slate-300">
+                          Crea pases de entrada digitales inmediatos para familiares, amigos, paquetería o técnicos, y compártelos directo por WhatsApp.
+                        </p>
+                      </div>
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Descripción de la Falla</label>
-                    <textarea
-                      required
-                      placeholder="Describe a detalle el problema reportado..."
-                      value={newTicketDesc}
-                      onChange={(e) => setNewTicketDesc(e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-700 focus:outline-hidden min-h-[50px]"
-                    />
-                  </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-                  <div>
-                    <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Prioridad</label>
-                    <div className="flex gap-2">
-                      {(['baja', 'media', 'alta'] as const).map(p => (
+                    {/* SUB-MODULE A: FORMULARIO GENERADOR DE QR */}
+                    <div className="lg:col-span-1 bg-[#1E1E22] border border-[#2d2d32] rounded-2xl p-5 space-y-4">
+                      <div>
+                        <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-widest font-mono">Pase Nuevo</span>
+                        <h4 className="text-base font-black text-white mt-0.5">Crear Pase QR de Acceso</h4>
+                        <p className="text-xs text-slate-400">Ingresa los datos para generar el código de caseta.</p>
+                      </div>
+
+                      <form onSubmit={handleGenerateInvite} className="space-y-3 font-sans text-xs">
+                        <div>
+                          <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">
+                            Tipo de Visita
+                          </label>
+                          <div className="grid grid-cols-2 gap-1.5 font-sans">
+                            {[
+                              { id: 'visita', label: '🚗 Familiar / Social' },
+                              { id: 'delivery', label: '📦 Delivery / Paquetería' },
+                              { id: 'proveedor', label: '🛠️ Proveedor / Técnico' },
+                              { id: 'mudanza', label: '🚚 Mudanza / Carga' }
+                            ].map(item => (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => setVisitorAccessType(item.id as any)}
+                                className={`p-2 rounded-xl border text-[10px] font-bold text-left transition cursor-pointer ${
+                                  visitorAccessType === item.id
+                                    ? 'bg-blue-600/20 border-blue-500 text-blue-300 shadow-sm'
+                                    : 'bg-slate-950 border-slate-850 text-slate-400 hover:text-white'
+                                }`}
+                              >
+                                {item.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">
+                            Nombre del Visitante / Conductor *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Ej. Ing. Carlos Ortiz"
+                            value={visitorName}
+                            onChange={(e) => setVisitorName(e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:border-blue-500 focus:outline-hidden font-bold"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">
+                              Casa / Lote Destino *
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="Ej. Casa 105"
+                              value={visitorCondo}
+                              onChange={(e) => setVisitorCondo(e.target.value)}
+                              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:border-blue-500 focus:outline-hidden font-bold"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">
+                              Placas Vehículo (Opcional)
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="Ej. JNY-4921"
+                              value={visitorPlate}
+                              onChange={(e) => setVisitorPlate(e.target.value)}
+                              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:border-blue-500 focus:outline-hidden font-mono uppercase"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">
+                            Vigencia del Pase
+                          </label>
+                          <select
+                            value={visitorValidity}
+                            onChange={(e) => setVisitorValidity(e.target.value as any)}
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:border-blue-500 focus:outline-hidden font-sans"
+                          >
+                            <option value="1_uso">1 solo acceso (Se invalida al ingresar)</option>
+                            <option value="24_horas">24 Horas (Válido todo el día de hoy)</option>
+                            <option value="3_dias">3 Días (Fin de semana / Estancia corta)</option>
+                            <option value="7_dias">7 Días (Semanal / Obra / Contratista)</option>
+                          </select>
+                        </div>
+
                         <button
-                          key={p}
-                          type="button"
-                          onClick={() => setNewTicketPriority(p)}
-                          className={`flex-1 py-1 text-[9px] font-bold uppercase rounded-lg border transition ${
-                            newTicketPriority === p 
-                              ? 'bg-rose-500/10 text-rose-400 border-rose-500/35' 
-                              : 'bg-slate-950 text-slate-500 border-slate-900'
-                          }`}
+                          type="submit"
+                          className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-black text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-blue-950/40"
                         >
-                          {p}
+                          <QrCode className="w-4 h-4 text-emerald-300" />
+                          <span>Generar Pase Digital QR</span>
                         </button>
+                      </form>
+
+                      {/* Display Generated QR Card */}
+                      {generatedInviteQR && (
+                        <div className="p-4 bg-slate-950 border border-blue-500/40 rounded-2xl space-y-3 animate-fade-in text-center">
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-500/15 border border-emerald-500/30 rounded-full text-[9px] font-bold text-emerald-400 uppercase font-mono">
+                            <CheckCircle2 className="w-3 h-3" /> Pase QR Generado & Vigente
+                          </div>
+
+                          <div className="bg-white p-3 rounded-2xl inline-block shadow-xl mx-auto">
+                            <img
+                              src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(generatedInviteQR)}`}
+                              alt="Código QR de Acceso"
+                              className="w-36 h-36 mx-auto"
+                            />
+                          </div>
+
+                          <div className="space-y-0.5 text-left bg-[#141417] p-2.5 rounded-xl border border-slate-800 text-[11px]">
+                            <p className="text-slate-400 font-mono text-[9px]">TOKEN: <strong className="text-purple-400">{generatedInviteQR}</strong></p>
+                            <p className="text-white font-bold">Visitante: {visitorName}</p>
+                            <p className="text-slate-300">Destino: {visitorCondo} {visitorPlate ? `| Auto: ${visitorPlate}` : ''}</p>
+                          </div>
+
+                          {/* WhatsApp Direct Share Button */}
+                          <div className="space-y-1.5">
+                            <a
+                              href={`https://wa.me/?text=${encodeURIComponent(`¡Hola *${visitorName}*!\n\nTe comparto tu *Pase Temporal de Entrada QR* autorizado para ingresar al condominio con destino en *${visitorCondo}*.\n\n📱 *Código QR de Acceso:* ${generatedInviteQR}\n\nPresiona este enlace para abrir y mostrar tu pase en caseta:\n🔗 ${window.location.origin}${window.location.pathname}?pass=${generatedInviteQR}\n\n⚠️ *Favor de mostrar este código al guardia en la caseta para abrir la pluma.*`)}`}
+                              target="_blank"
+                              referrerPolicy="no-referrer"
+                              className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shadow-md shadow-emerald-950/50"
+                            >
+                              <Send className="w-3.5 h-3.5" />
+                              <span>Compartir por WhatsApp</span>
+                            </a>
+
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (navigator.clipboard) {
+                                    navigator.clipboard.writeText(generatedInviteQR);
+                                    setQrTokenCopied(true);
+                                    setTimeout(() => setQrTokenCopied(false), 2000);
+                                  }
+                                }}
+                                className="flex-1 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 text-[10px] font-bold rounded-lg border border-slate-800 transition flex items-center justify-center gap-1"
+                              >
+                                <Copy className="w-3 h-3 text-slate-400" />
+                                <span>{qrTokenCopied ? '¡Copiado!' : 'Copiar Token'}</span>
+                              </button>
+
+                              <a
+                                href={`https://api.qrserver.com/v1/create-qr-code/?size=350x350&data=${encodeURIComponent(generatedInviteQR)}`}
+                                target="_blank"
+                                download="pase-qr.png"
+                                className="flex-1 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 text-[10px] font-bold rounded-lg border border-slate-800 transition flex items-center justify-center gap-1 text-center"
+                              >
+                                <Download className="w-3 h-3 text-slate-400" />
+                                <span>Descargar QR</span>
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* SUB-MODULE B: CREDENCIAL DIGITAL QR DEL RESIDENTE */}
+                    <div className="lg:col-span-1 space-y-4">
+                      <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-2xl p-5 space-y-4">
+                        <div>
+                          <span className="text-[9px] font-bold text-blue-400 uppercase tracking-widest font-mono">Credencial Personal</span>
+                          <h4 className="text-base font-black text-white mt-0.5">Carnet Digital del Condómino</h4>
+                          <p className="text-xs text-slate-400">Tu código QR permanente para ingresar a pie o en auto por la caseta.</p>
+                        </div>
+
+                        {/* Digital ID Card */}
+                        <div className="bg-gradient-to-br from-blue-900/40 via-[#18181D] to-purple-900/30 border-2 border-blue-500/40 rounded-2xl p-4 shadow-xl space-y-3 relative overflow-hidden text-left">
+                          <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
+
+                          <div className="flex items-center justify-between border-b border-blue-500/20 pb-2">
+                            <div className="flex items-center gap-2">
+                              <Building2 className="w-4 h-4 text-blue-400" />
+                              <span className="text-[10px] font-black text-white uppercase tracking-wider font-mono">Residencial Bosques</span>
+                            </div>
+                            <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[9px] font-bold font-mono">
+                              ✓ Al Corriente
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-4">
+                            <div className="bg-white p-2 rounded-xl shrink-0 shadow-md">
+                              <img
+                                src={`https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${encodeURIComponent('CNLS-RESIDENT-MARIANA-SILVA-CASA105-V2026')}`}
+                                alt="QR Permanente Residente"
+                                className="w-20 h-20"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-[8px] font-mono uppercase tracking-wider text-slate-400 font-bold block">
+                                Propietario Acreditado
+                              </span>
+                              <h5 className="text-sm font-black text-white leading-tight">Mariana Silva</h5>
+                              <p className="text-xs font-bold text-blue-300 font-mono">Casa 105 • Torre A</p>
+                              <p className="text-[9px] text-slate-400 font-mono">Vehículo: Honda CR-V (JNY-4921)</p>
+                            </div>
+                          </div>
+
+                          <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[9px] text-slate-400 font-mono">
+                            <span>ID: CNLS-RES-105</span>
+                            <span className="text-emerald-400 font-bold">Vigencia: Diciembre 2026</span>
+                          </div>
+                        </div>
+
+                        {/* Quick Instructions */}
+                        <div className="p-3 bg-slate-950 border border-slate-850 rounded-xl text-[11px] text-slate-400 space-y-1 text-left">
+                          <p className="font-bold text-slate-300">¿Cómo usar tu Credencial QR?</p>
+                          <p className="text-[10px] text-slate-400 leading-relaxed">
+                            Muestra este código QR frente al lector óptico ubicado en la columna de la caseta de acceso. Al escanearse, la barrera vehicular se abrirá automáticamente sin demoras.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* SUB-MODULE C: HISTORIAL DE PASES GENERADOS & REVOCACIÓN */}
+                    <div className="lg:col-span-1 bg-[#1E1E22] border border-[#2d2d32] rounded-2xl p-5 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-[9px] font-bold text-purple-400 uppercase tracking-widest font-mono">Auditoría de Visitas</span>
+                          <h4 className="text-base font-black text-white mt-0.5">Pases Activos & Recientes</h4>
+                        </div>
+                        <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded text-[9px] font-mono font-bold">
+                          {residentPassesList.filter(p => p.status === 'valido').length} Vigentes
+                        </span>
+                      </div>
+
+                      <div className="space-y-2.5 max-h-[460px] overflow-y-auto pr-1">
+                        {residentPassesList.map(pass => (
+                          <div
+                            key={pass.id}
+                            className={`p-3 rounded-xl border text-left space-y-1.5 transition ${
+                              pass.status === 'valido'
+                                ? 'bg-[#141417] border-[#2c2c34] hover:border-blue-500/40'
+                                : pass.status === 'usado'
+                                ? 'bg-slate-950/60 border-slate-850 opacity-75'
+                                : 'bg-rose-950/20 border-rose-900/40 opacity-60'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-black text-white truncate max-w-[160px]">
+                                {pass.visitorName}
+                              </span>
+                              <span className={`text-[8px] font-bold uppercase font-mono px-2 py-0.5 rounded ${
+                                pass.status === 'valido'
+                                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                                  : pass.status === 'usado'
+                                  ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
+                                  : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                              }`}>
+                                {pass.status === 'valido' ? '✓ Activo' : pass.status === 'usado' ? 'Usado' : '✕ Revocado'}
+                              </span>
+                            </div>
+
+                            <div className="text-[10px] text-slate-400 space-y-0.5 font-sans">
+                              <p>Motivo: <strong className="text-slate-200">{pass.type}</strong></p>
+                              <p className="font-mono text-[9px]">Placas: {pass.plate} • Vigencia: {pass.validUntil}</p>
+                              <p className="font-mono text-[8.5px] text-slate-500">Token: {pass.token}</p>
+                            </div>
+
+                            {pass.status === 'valido' && (
+                              <div className="pt-1.5 border-t border-[#232328] flex items-center justify-between">
+                                <a
+                                  href={`https://wa.me/?text=${encodeURIComponent(`¡Hola! Te reenvío tu Pase QR para ingresar a ${pass.condo}: ${window.location.origin}${window.location.pathname}?pass=${pass.token}`)}`}
+                                  target="_blank"
+                                  referrerPolicy="no-referrer"
+                                  className="text-[9.5px] text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Send className="w-3 h-3" /> Reenviar
+                                </a>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleRevokePass(pass.id)}
+                                  className="text-[9.5px] text-rose-400 hover:text-rose-300 font-bold flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Trash2 className="w-3 h-3" /> Cancelar Pase
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: MIS CUOTAS & PAGOS */}
+              {residenteTab === 'finanzas' && (
+                <div className="space-y-6 animate-fade-in">
+                  <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-3xl p-6 shadow-xl text-left space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#2d2d32] pb-4">
+                      <div>
+                        <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono">
+                          Estado de Cuenta del Condómino
+                        </span>
+                        <h3 className="text-xl font-black text-white mt-1">Cuotas de Mantenimiento & Pagos (Casa 105)</h3>
+                        <p className="text-xs text-slate-400 mt-0.5">Consulta tus recibos, comprobantes de pago y estado de solvencia.</p>
+                      </div>
+
+                      <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl flex items-center gap-3">
+                        <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+                        <div>
+                          <p className="text-xs font-black text-emerald-300">Al Corriente de Pagos</p>
+                          <p className="text-[10px] text-slate-400 font-mono">Próximo vencimiento: 10 de Agosto</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="p-4 bg-[#141417] border border-[#27272D] rounded-2xl">
+                        <span className="text-[9px] font-mono uppercase text-slate-500 font-bold">Cuota Mensual Actual</span>
+                        <p className="text-2xl font-black text-white mt-1">$2,500.00 <span className="text-xs font-normal text-slate-400">MXN</span></p>
+                        <p className="text-[10px] text-emerald-400 mt-1 font-bold">✓ Periodo Julio 2026 Pagado</p>
+                      </div>
+
+                      <div className="p-4 bg-[#141417] border border-[#27272D] rounded-2xl">
+                        <span className="text-[9px] font-mono uppercase text-slate-500 font-bold">Fondo de Reserva Comunal</span>
+                        <p className="text-2xl font-black text-purple-400 mt-1">$500.00 <span className="text-xs font-normal text-slate-400">MXN</span></p>
+                        <p className="text-[10px] text-slate-400 mt-1">Incluido en tu mantenimiento</p>
+                      </div>
+
+                      <div className="p-4 bg-[#141417] border border-[#27272D] rounded-2xl flex flex-col justify-between">
+                        <span className="text-[9px] font-mono uppercase text-slate-500 font-bold">Método Preferido SPEI</span>
+                        <p className="text-xs font-bold text-white font-mono mt-1">CLABE: 012180001234567890</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (navigator.clipboard) {
+                              navigator.clipboard.writeText('012180001234567890');
+                              showSuccessBanner('✓ CLABE copiada al portapapeles.');
+                            }
+                          }}
+                          className="mt-2 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] rounded-lg transition text-center cursor-pointer"
+                        >
+                          Copiar CLABE para Transferir
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: RESERVA DE AMENIDADES */}
+              {residenteTab === 'amenidades' && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-in">
+                  {/* MODULE A: AMENITIES CALENDAR RESERVATION */}
+                  <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-2xl p-5 space-y-4">
+                    <div>
+                      <span className="text-[9px] font-bold text-purple-400 uppercase tracking-widest font-mono">Espacios Comunes</span>
+                      <h3 className="text-base font-black text-white mt-1">Reserva de Amenidades</h3>
+                      <p className="text-xs text-slate-450 mt-0.5">Calendario inteligente para apartar canchas, terrazas y salones.</p>
+                    </div>
+
+                    <form onSubmit={handleAddReservation} className="space-y-3 font-sans text-xs">
+                      <div>
+                        <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Elige la Amenidad</label>
+                        <select
+                          value={selectedAmenity}
+                          onChange={(e) => setSelectedAmenity(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-hidden"
+                        >
+                          <option value="Salón de Eventos">Salón de Eventos (Cuota: $1,500)</option>
+                          <option value="Alberca & Terraza">Alberca & Terraza (Cuota: $500)</option>
+                          <option value="Cancha de Tenis">Cancha de Tenis (Cuota: Gratis)</option>
+                          <option value="Asadores Jardín">Asadores Jardín (Cuota: Gratis)</option>
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Fecha</label>
+                          <input
+                            type="date"
+                            required
+                            value={resvDate}
+                            onChange={(e) => setResvDate(e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-hidden font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Horario</label>
+                          <select
+                            value={resvTimeSlot}
+                            onChange={(e) => setResvTimeSlot(e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-hidden"
+                          >
+                            <option value="09:00 - 13:00">09:00 - 13:00</option>
+                            <option value="14:00 - 18:00">14:00 - 18:00</option>
+                            <option value="19:00 - 23:00">19:00 - 23:00</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Condómino</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Casa 102"
+                            value={resvCondo}
+                            onChange={(e) => setResvCondo(e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-hidden"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Responsable</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Alejandro Ruiz"
+                            value={resvResident}
+                            onChange={(e) => setResvResident(e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-hidden"
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-1"
+                      >
+                        <Calendar className="w-3.5 h-3.5" /> Agendar Reserva
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Reservation Log */}
+                  <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-2xl p-5 space-y-3">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest font-mono">Reservaciones Registradas</span>
+                    <div className="space-y-2 max-h-[340px] overflow-y-auto">
+                      {reservations.map(r => (
+                        <div key={r.id} className="p-3 bg-slate-950 border border-slate-900 rounded-xl text-left text-xs flex justify-between items-center">
+                          <div>
+                            <h4 className="font-bold text-slate-200">{r.amenityName}</h4>
+                            <p className="text-slate-400 text-[11px] font-sans mt-0.5">Resp: {r.resident} ({r.condo})</p>
+                            <p className="text-[10px] text-slate-500 font-mono mt-0.5">Fecha: {r.date} [{r.timeSlot}]</p>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                            r.status === 'confirmado' 
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              : 'bg-amber-500/10 text-amber-400 border border-amber-500/20 animate-pulse'
+                          }`}>
+                            {r.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 4: COMUNICACIÓN & SOPORTE */}
+              {residenteTab === 'comunicacion' && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-in">
+                  {/* MODULE B: HELPDESK TICKETS */}
+                  <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-2xl p-5 space-y-4">
+                    <div>
+                      <span className="text-[9px] font-bold text-rose-400 uppercase tracking-widest font-mono">Soporte Técnico</span>
+                      <h3 className="text-base font-black text-white mt-1">Mesa de Ayuda (Reporte de Fallas)</h3>
+                      <p className="text-xs text-slate-450 mt-0.5">Canal de atención ciudadana para reportar desperfectos en áreas públicas.</p>
+                    </div>
+
+                    <form onSubmit={handleAddTicket} className="space-y-2.5 font-sans text-xs">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Casa / Condo</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Casa 105"
+                            value={newTicketCondo}
+                            onChange={(e) => setNewTicketCondo(e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-hidden"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Categoría</label>
+                          <select
+                            value={newTicketCategory}
+                            onChange={(e) => setNewTicketCategory(e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-hidden"
+                          >
+                            <option value="Plomería">Plomería</option>
+                            <option value="Eléctrico">Eléctrico</option>
+                            <option value="Seguridad">Seguridad</option>
+                            <option value="Jardinería">Jardinería</option>
+                            <option value="Áreas Comunes">Áreas Comunes</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Descripción de la Falla</label>
+                        <textarea
+                          required
+                          placeholder="Describe a detalle el problema reportado..."
+                          value={newTicketDesc}
+                          onChange={(e) => setNewTicketDesc(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-700 focus:outline-hidden min-h-[50px]"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Prioridad</label>
+                        <div className="flex gap-2">
+                          {(['baja', 'media', 'alta'] as const).map(p => (
+                            <button
+                              key={p}
+                              type="button"
+                              onClick={() => setNewTicketPriority(p)}
+                              className={`flex-1 py-1 text-[9px] font-bold uppercase rounded-lg border transition ${
+                                newTicketPriority === p 
+                                  ? 'bg-rose-500/10 text-rose-400 border-rose-500/35' 
+                                  : 'bg-slate-950 text-slate-500 border-slate-900'
+                              }`}
+                            >
+                              {p}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="w-full py-2 bg-rose-600/20 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/20 font-bold text-xs rounded-xl transition cursor-pointer"
+                      >
+                        Crear Ticket de Soporte
+                      </button>
+                    </form>
+
+                    <div className="pt-2 max-h-44 overflow-y-auto space-y-2">
+                      {tickets.map(t => (
+                        <div key={t.id} className="p-2.5 bg-slate-950 border border-slate-900 rounded-xl text-left text-[10px]">
+                          <div className="flex items-center justify-between font-bold">
+                            <span className="text-slate-300">{t.category} — {t.condo}</span>
+                            <span className={`px-1 rounded-[4px] text-[7.5px] font-bold uppercase ${
+                              t.priority === 'alta' ? 'bg-rose-600/15 text-rose-400 border border-rose-500/20' : 'bg-slate-800 text-slate-400'
+                            }`}>
+                              {t.priority}
+                            </span>
+                          </div>
+                          <p className="text-slate-400 mt-1">{t.description}</p>
+                        </div>
                       ))}
                     </div>
                   </div>
 
-                  <button
-                    type="submit"
-                    className="w-full py-2 bg-rose-600/20 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/20 font-bold text-xs rounded-xl transition cursor-pointer"
-                  >
-                    Crear Ticket de Soporte
-                  </button>
-                </form>
-
-                {/* Ticket inventory */}
-                <div className="pt-2 max-h-52 overflow-y-auto space-y-2">
-                  {tickets.map(t => (
-                    <div key={t.id} className="p-2.5 bg-slate-950 border border-slate-900 rounded-xl text-left text-[10px] relative">
-                      <div className="flex items-center justify-between font-bold">
-                        <span className="text-slate-300">{t.category} — {t.condo}</span>
-                        <span className={`px-1 rounded-[4px] text-[7.5px] font-bold uppercase ${
-                          t.priority === 'alta' ? 'bg-rose-600/15 text-rose-400 border border-rose-500/20' : 'bg-slate-800 text-slate-400'
-                        }`}>
-                          {t.priority}
-                        </span>
-                      </div>
-                      <p className="text-slate-400 mt-1">{t.description}</p>
-                      <div className="flex items-center justify-between mt-1.5 pt-1 border-t border-slate-900 text-[8px]">
-                        <span className="text-slate-500 font-mono">ID: {t.id} • {t.createdAt}</span>
-                        <span className="text-purple-400 font-bold uppercase">{t.status.replace('_', ' ')}</span>
-                      </div>
+                  {/* MODULE C: OFFICIAL BULLETINS */}
+                  <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-2xl p-5 space-y-4">
+                    <div>
+                      <span className="text-[9px] font-bold text-amber-400 uppercase tracking-widest font-mono">Notificaciones Comunitarias</span>
+                      <h3 className="text-base font-black text-white mt-1">Comunicados y Anuncios Oficiales</h3>
+                      <p className="text-xs text-slate-450 mt-0.5">Difunde noticias importantes, alertas y avisos urgentes a los condóminos.</p>
                     </div>
-                  ))}
-                </div>
-              </div>
 
-              {/* MODULE C: OFFICIAL BULLETINS */}
-              <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-2xl p-5 space-y-4">
-                <div>
-                  <span className="text-[9px] font-bold text-amber-400 uppercase tracking-widest font-mono">Notificaciones Comunitarias</span>
-                  <h3 className="text-base font-black text-white mt-1">Comunicados y Anuncios Oficiales</h3>
-                  <p className="text-xs text-slate-450 mt-0.5">Difunde noticias importantes, alertas y avisos urgentes a los dispositivos de los condóminos.</p>
-                </div>
-
-                <form onSubmit={handleAddBulletin} className="space-y-2.5 font-sans text-xs">
-                  <div>
-                    <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Título del Aviso</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Ej. Cierre Temporal de Alberca"
-                      value={newBulletinTitle}
-                      onChange={(e) => setNewBulletinTitle(e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-hidden"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Contenido del Aviso</label>
-                    <textarea
-                      required
-                      placeholder="Describe los detalles del aviso de forma formal..."
-                      value={newBulletinContent}
-                      onChange={(e) => setNewBulletinContent(e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-700 focus:outline-hidden min-h-[50px]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Categoría</label>
-                    <select
-                      value={newBulletinCategory}
-                      onChange={(e) => setNewBulletinCategory(e.target.value as any)}
-                      className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-hidden"
-                    >
-                      <option value="comunidad">Comunidad / General</option>
-                      <option value="seguridad">Seguridad / Alerta</option>
-                      <option value="mantenimiento">Mantenimiento / Servicio</option>
-                    </select>
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="w-full py-2 bg-amber-600/20 hover:bg-amber-600 text-amber-400 hover:text-white border border-amber-500/20 font-bold text-xs rounded-xl transition cursor-pointer"
-                  >
-                    Publicar Aviso en Pizarrón
-                  </button>
-                </form>
-
-                {/* Bulletins Feed */}
-                <div className="pt-2 max-h-52 overflow-y-auto space-y-2">
-                  {bulletins.map(b => (
-                    <div key={b.id} className="p-2.5 bg-slate-950 border border-slate-900 rounded-xl text-left text-[10px]">
-                      <div className="flex items-center justify-between font-bold text-slate-200">
-                        <span>{b.title}</span>
-                        <span className={`px-1 rounded text-[7.5px] uppercase font-bold ${
-                          b.category === 'seguridad' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-[#1E1E22] text-slate-400'
-                        }`}>
-                          {b.category}
-                        </span>
+                    <form onSubmit={handleAddBulletin} className="space-y-2.5 font-sans text-xs">
+                      <div>
+                        <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Título del Aviso</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Ej. Cierre Temporal de Alberca"
+                          value={newBulletinTitle}
+                          onChange={(e) => setNewBulletinTitle(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-hidden"
+                        />
                       </div>
-                      <p className="text-slate-450 mt-1 font-sans leading-relaxed text-[9px]">{b.content}</p>
-                      <p className="text-[8px] text-slate-600 mt-1 font-mono">Publicado el {b.date}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
 
-            </div>
+                      <div>
+                        <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Contenido del Aviso</label>
+                        <textarea
+                          required
+                          placeholder="Describe los detalles del aviso de forma formal..."
+                          value={newBulletinContent}
+                          onChange={(e) => setNewBulletinContent(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-700 focus:outline-hidden min-h-[50px]"
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="w-full py-2 bg-amber-600/20 hover:bg-amber-600 text-amber-400 hover:text-white border border-amber-500/20 font-bold text-xs rounded-xl transition cursor-pointer"
+                      >
+                        Publicar Aviso en Pizarrón
+                      </button>
+                    </form>
+
+                    <div className="pt-2 max-h-44 overflow-y-auto space-y-2">
+                      {bulletins.map(b => (
+                        <div key={b.id} className="p-2.5 bg-slate-950 border border-slate-900 rounded-xl text-left text-[10px]">
+                          <div className="flex items-center justify-between font-bold text-slate-200">
+                            <span>{b.title}</span>
+                            <span className="px-1 rounded text-[7.5px] uppercase font-bold bg-amber-500/15 text-amber-400 border border-amber-500/20">
+                              {b.category}
+                            </span>
+                          </div>
+                          <p className="text-slate-450 mt-1 text-[9px]">{b.content}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
           </div>
         )}
 
