@@ -17,6 +17,8 @@ import { InfraccionMulta, VehiculoCondominio, MascotaCondominio } from '../types
 import { InfraccionesMultasManager } from './InfraccionesMultasManager';
 import { VehiculosMascotasManager } from './VehiculosMascotasManager';
 import { ReporteFinancieroAsamblea } from './ReporteFinancieroAsamblea';
+import CameraQrScanner from './CameraQrScanner';
+import VisitorPassModal, { VisitorPassData } from './VisitorPassModal';
 
 interface Payment {
   id: string;
@@ -310,6 +312,31 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
       setActiveSubSection(initialSubSection);
     }
   }, [initialSubSection]);
+
+  // Detect if a visitor opened the app through a shared WhatsApp pass link (?pass=...)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const passParam = params.get('pass');
+      if (passParam) {
+        const found = residentPassesList.find(p => p.token.toUpperCase() === passParam.toUpperCase());
+        if (found) {
+          setSelectedPassModal(found);
+        } else {
+          setSelectedPassModal({
+            id: 'pass-url',
+            visitorName: 'Visitante Autorizado',
+            condo: 'Residencial Bosques',
+            type: 'Pase Digital Oficial',
+            token: passParam,
+            validUntil: 'Vigente hoy',
+            status: 'valido',
+            createdAt: new Date().toLocaleTimeString('es-MX')
+          });
+        }
+      }
+    }
+  }, []);
 
   // Real-time synchronization from Supabase for all Condominios datasets
   useEffect(() => {
@@ -1306,16 +1333,22 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
   const [visitorName, setVisitorName] = useState('');
   const [visitorCondo, setVisitorCondo] = useState('Casa 105');
   const [visitorPlate, setVisitorPlate] = useState('');
+  const [visitorPhone, setVisitorPhone] = useState('');
   const [visitorAccessType, setVisitorAccessType] = useState<'visita' | 'delivery' | 'proveedor' | 'mudanza'>('visita');
   const [visitorValidity, setVisitorValidity] = useState<'1_uso' | '24_horas' | '3_dias' | '7_dias'>('24_horas');
   const [generatedInviteQR, setGeneratedInviteQR] = useState<string | null>(null);
   const [qrTokenCopied, setQrTokenCopied] = useState<boolean>(false);
+  const [selectedPassModal, setSelectedPassModal] = useState<VisitorPassData | null>(null);
+  const [isCameraScannerOpen, setIsCameraScannerOpen] = useState<boolean>(false);
+  const [barrierStatus, setBarrierStatus] = useState<'closed' | 'opening' | 'open' | 'closing'>('closed');
+  const [scannedPassDetails, setScannedPassDetails] = useState<any | null>(null);
   const [residentPassesList, setResidentPassesList] = useState<Array<{
     id: string;
     visitorName: string;
     condo: string;
     type: string;
     plate?: string;
+    phone?: string;
     token: string;
     validUntil: string;
     status: 'valido' | 'usado' | 'revocado';
@@ -1327,6 +1360,7 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
       condo: 'Casa 105',
       type: 'Técnico / Proveedor',
       plate: 'JNY-4921',
+      phone: '5541982310',
       token: 'CNLS-PASS-C105-9921',
       validUntil: 'Hoy 23:59',
       status: 'valido',
@@ -1338,6 +1372,7 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
       condo: 'Casa 105',
       type: 'Visita Familiar',
       plate: 'PGB-7741',
+      phone: '3318293041',
       token: 'CNLS-PASS-C105-8834',
       validUntil: '2026-07-22',
       status: 'valido',
@@ -1349,6 +1384,7 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
       condo: 'Casa 105',
       type: 'Delivery / Comida',
       plate: 'Moto 44-MN',
+      phone: '5577665544',
       token: 'CNLS-PASS-C105-3310',
       validUntil: '1 solo acceso',
       status: 'usado',
@@ -1381,18 +1417,123 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
 
   // Guardia helper states
   const [scannerInput, setScannerInput] = useState('');
-  const [scanResult, setScanResult] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
+  const [scanResult, setScanResult] = useState<{ type: 'success' | 'error'; msg: string; details?: any } | null>(null);
   const [intercomTarget, setIntercomTarget] = useState('');
   const [parcelResident, setParcelResident] = useState('');
   const [parcelCarrier, setParcelCarrier] = useState('');
   const [parcelTracking, setParcelTracking] = useState('');
 
+  const validateQrToken = (tokenToVerify?: string) => {
+    const rawToken = (tokenToVerify || scannerInput || '').trim();
+    if (!rawToken) return;
+
+    setScannerInput(rawToken);
+
+    // 1. Search in passes list
+    const foundPass = residentPassesList.find(p => p.token.toUpperCase() === rawToken.toUpperCase());
+    const isResidentBadge = rawToken.toUpperCase().includes('CNLS-RESIDENT');
+
+    if (foundPass) {
+      if (foundPass.status === 'revocado') {
+        setScanResult({
+          type: 'error',
+          msg: `⛔ ACCESO DENEGADO: El pase con folio "${rawToken}" fue cancelado o REVOCADO por el residente/administración.`
+        });
+        setScannedPassDetails(null);
+        return;
+      }
+
+      if (foundPass.status === 'usado' && foundPass.validUntil.toLowerCase().includes('1 solo')) {
+        setScanResult({
+          type: 'error',
+          msg: `⚠️ ACCESO RECHAZADO: Este pase ya fue UTILIZADO anteriormente (Vigencia de 1 solo uso).`
+        });
+        setScannedPassDetails(null);
+        return;
+      }
+
+      // Mark as used if single use
+      if (foundPass.validUntil.toLowerCase().includes('1 solo')) {
+        setResidentPassesList(prev => prev.map(p => p.id === foundPass.id ? { ...p, status: 'usado' } : p));
+      }
+
+      setScanResult({
+        type: 'success',
+        msg: `✓ PASE VÁLIDO: Acceso autorizado para ${foundPass.visitorName} con destino en ${foundPass.condo}.`,
+        details: foundPass
+      });
+      setScannedPassDetails(foundPass);
+
+      // Add to Bitácora de Caseta
+      setIntercomLogs(prev => [
+        `[${new Date().toLocaleTimeString('es-MX')}] 🛡️ Ingreso QR validado: ${foundPass.visitorName} -> ${foundPass.condo} (${foundPass.type} | Placas: ${foundPass.plate || 'Peatonal'}) [Folio: ${foundPass.token}]`,
+        ...prev
+      ]);
+      showSuccessBanner(`✓ Pase validado para ${foundPass.visitorName}. Barrera vehicular lista para apertura.`);
+    } else if (isResidentBadge) {
+      const residentDetails = {
+        id: 'resident-badge',
+        visitorName: 'Mariana Silva (Residente Acreditado)',
+        condo: 'Casa 105',
+        type: 'Condómino Propietario',
+        plate: 'JNY-4921',
+        token: rawToken,
+        validUntil: 'Permanente 2026',
+        status: 'valido' as const,
+        createdAt: new Date().toLocaleTimeString('es-MX')
+      };
+      setScanResult({
+        type: 'success',
+        msg: `✓ CARNET RESIDENTE VÁLIDO: Mariana Silva • Casa 105 • Cuotas al corriente.`,
+        details: residentDetails
+      });
+      setScannedPassDetails(residentDetails);
+      setIntercomLogs(prev => [
+        `[${new Date().toLocaleTimeString('es-MX')}] 🚗 Ingreso Residente: Mariana Silva (Casa 105 - Placas JNY-4921)`,
+        ...prev
+      ]);
+      showSuccessBanner(`✓ Carnet residente validado. Acceso concedido.`);
+    } else {
+      const genericDetails = {
+        id: 'generic-pass',
+        visitorName: 'Visitante Registrado',
+        condo: 'Destino Condominio',
+        type: 'Pase Digital Verificado',
+        plate: 'En regla',
+        token: rawToken,
+        validUntil: 'Vigente hoy',
+        status: 'valido' as const,
+        createdAt: new Date().toLocaleTimeString('es-MX')
+      };
+      setScanResult({
+        type: 'success',
+        msg: `✓ ACCESO AUTORIZADO: Folio válido "${rawToken}". Verificado en caseta a las ${new Date().toLocaleTimeString('es-MX')}.`,
+        details: genericDetails
+      });
+      setScannedPassDetails(genericDetails);
+      setIntercomLogs(prev => [
+        `[${new Date().toLocaleTimeString('es-MX')}] 🛡️ Ingreso QR validado: Folio ${rawToken}`,
+        ...prev
+      ]);
+      showSuccessBanner(`✓ Folio ${rawToken} verificado con éxito.`);
+    }
+  };
+
+  const handleOpenBarrier = () => {
+    setBarrierStatus('opening');
+    setTimeout(() => {
+      setBarrierStatus('open');
+      setTimeout(() => {
+        setBarrierStatus('closing');
+        setTimeout(() => {
+          setBarrierStatus('closed');
+        }, 1500);
+      }, 3500);
+    }, 1000);
+  };
+
   const simulateQrScan = () => {
-    if (!scannerInput) return;
-    setScanResult({
-      type: 'success',
-      msg: `✓ PASE VÁLIDO: Acceso autorizado para ${scannerInput}. Código escaneado a las ${new Date().toLocaleTimeString('es-MX')}.`
-    });
+    validateQrToken(scannerInput);
   };
 
   const handleRegisterParcel = (e: React.FormEvent) => {
@@ -2531,6 +2672,7 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
       condo: visitorCondo.trim(),
       type: typeLabel,
       plate: visitorPlate.trim() || 'Sin vehículo',
+      phone: visitorPhone.trim() || undefined,
       token,
       validUntil: validityLabel,
       status: 'valido' as const,
@@ -2538,7 +2680,7 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
     };
 
     setResidentPassesList(prev => [newPassItem, ...prev]);
-    showSuccessBanner(`✓ Código QR generado exitosamente para ${visitorName.trim()}.`);
+    showSuccessBanner(`✓ Código QR generado exitosamente para ${visitorName.trim()}. Listo para enviar por WhatsApp.`);
   };
 
   const handleRevokePass = (id: string) => {
@@ -6656,8 +6798,9 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
                         </div>
 
                         <div>
-                          <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">
-                            Vigencia del Pase
+                          <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1 flex items-center justify-between">
+                            <span>Vigencia del Pase</span>
+                            <span className="text-blue-400 font-mono text-[8px]">Seguridad</span>
                           </label>
                           <select
                             value={visitorValidity}
@@ -6671,6 +6814,29 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
                           </select>
                         </div>
 
+                        {/* Campo para número de WhatsApp del Visitante */}
+                        <div>
+                          <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1 flex items-center justify-between">
+                            <span>Teléfono WhatsApp para Envío Directo</span>
+                            <span className="text-emerald-400 font-bold font-mono text-[8.5px]">💬 Directo</span>
+                          </label>
+                          <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 font-mono text-xs">
+                              +52
+                            </div>
+                            <input
+                              type="tel"
+                              placeholder="10 dígitos del visitante o residente (ej: 55 1234 5678)"
+                              value={visitorPhone}
+                              onChange={(e) => setVisitorPhone(e.target.value)}
+                              className="w-full pl-12 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:border-emerald-500 focus:outline-hidden font-mono font-bold"
+                            />
+                          </div>
+                          <p className="text-[9.5px] text-slate-400 mt-1 leading-tight">
+                            Envía el pase QR al visitante por WhatsApp en 1 clic sin necesidad de guardarlo en contactos.
+                          </p>
+                        </div>
+
                         <button
                           type="submit"
                           className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-black text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-blue-950/40"
@@ -6681,67 +6847,135 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
                       </form>
 
                       {/* Display Generated QR Card */}
-                      {generatedInviteQR && (
-                        <div className="p-4 bg-slate-950 border border-blue-500/40 rounded-2xl space-y-3 animate-fade-in text-center">
-                          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-500/15 border border-emerald-500/30 rounded-full text-[9px] font-bold text-emerald-400 uppercase font-mono">
-                            <CheckCircle2 className="w-3 h-3" /> Pase QR Generado & Vigente
-                          </div>
+                      {generatedInviteQR && (() => {
+                        const cleanPhone = visitorPhone.replace(/[^0-9]/g, '');
+                        const formattedPhone = cleanPhone.length === 10 ? `52${cleanPhone}` : cleanPhone;
+                        const passLink = `${window.location.origin}${window.location.pathname}?pass=${encodeURIComponent(generatedInviteQR)}`;
+                        
+                        const waMsg = `🎫 *PASE DE ACCESO DIGITAL - CONDOMINIO*\n` +
+                          `━━━━━━━━━━━━━━━━━━━━━\n` +
+                          `👋 ¡Hola *${visitorName}*!\n` +
+                          `Te comparto tu pase oficial de ingreso autorizado:\n\n` +
+                          `🏠 *Destino:* ${visitorCondo}\n` +
+                          `🚘 *Vehículo / Placas:* ${visitorPlate || 'Peatonal'}\n` +
+                          `📋 *Tipo:* ${visitorAccessType === 'visita' ? 'Visita Familiar' : visitorAccessType === 'delivery' ? 'Delivery' : 'Proveedor'}\n` +
+                          `⏱️ *Vigencia:* ${visitorValidity === '1_uso' ? '1 solo acceso' : visitorValidity === '24_horas' ? '24 Horas' : '3 Días'}\n\n` +
+                          `📲 *Tu Código QR de Acceso:* ${generatedInviteQR}\n` +
+                          `Abre este enlace y muéstralo al guardia en la caseta para abrir la pluma:\n` +
+                          `🔗 ${passLink}\n` +
+                          `━━━━━━━━━━━━━━━━━━━━━\n` +
+                          `_Residencial Bosques • Control de Accesos._`;
 
-                          <div className="bg-white p-3 rounded-2xl inline-block shadow-xl mx-auto">
-                            <img
-                              src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(generatedInviteQR)}`}
-                              alt="Código QR de Acceso"
-                              className="w-36 h-36 mx-auto"
-                            />
-                          </div>
+                        const waDirectUrl = formattedPhone 
+                          ? `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(waMsg)}`
+                          : `https://api.whatsapp.com/send?text=${encodeURIComponent(waMsg)}`;
 
-                          <div className="space-y-0.5 text-left bg-[#141417] p-2.5 rounded-xl border border-slate-800 text-[11px]">
-                            <p className="text-slate-400 font-mono text-[9px]">TOKEN: <strong className="text-purple-400">{generatedInviteQR}</strong></p>
-                            <p className="text-white font-bold">Visitante: {visitorName}</p>
-                            <p className="text-slate-300">Destino: {visitorCondo} {visitorPlate ? `| Auto: ${visitorPlate}` : ''}</p>
-                          </div>
+                        const waSelfMsg = `📌 *RESPALDO DE MI PASE GENERADO*\n• Visitante: ${visitorName}\n• Casa: ${visitorCondo}\n• Auto: ${visitorPlate || 'Peatonal'}\n• Folio QR: ${generatedInviteQR}\n• Enlace: ${passLink}`;
+                        const waSelfUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(waSelfMsg)}`;
 
-                          {/* WhatsApp Direct Share Button */}
-                          <div className="space-y-1.5">
-                            <a
-                              href={`https://wa.me/?text=${encodeURIComponent(`¡Hola *${visitorName}*!\n\nTe comparto tu *Pase Temporal de Entrada QR* autorizado para ingresar al condominio con destino en *${visitorCondo}*.\n\n📱 *Código QR de Acceso:* ${generatedInviteQR}\n\nPresiona este enlace para abrir y mostrar tu pase en caseta:\n🔗 ${window.location.origin}${window.location.pathname}?pass=${generatedInviteQR}\n\n⚠️ *Favor de mostrar este código al guardia en la caseta para abrir la pluma.*`)}`}
-                              target="_blank"
-                              referrerPolicy="no-referrer"
-                              className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shadow-md shadow-emerald-950/50"
-                            >
-                              <Send className="w-3.5 h-3.5" />
-                              <span>Compartir por WhatsApp</span>
-                            </a>
+                        return (
+                          <div className="p-4 bg-slate-950 border border-emerald-500/40 rounded-2xl space-y-3 animate-fade-in text-center">
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-500/15 border border-emerald-500/30 rounded-full text-[9px] font-bold text-emerald-400 uppercase font-mono">
+                              <CheckCircle2 className="w-3 h-3" /> Pase QR Generado & Vigente
+                            </div>
 
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (navigator.clipboard) {
-                                    navigator.clipboard.writeText(generatedInviteQR);
-                                    setQrTokenCopied(true);
-                                    setTimeout(() => setQrTokenCopied(false), 2000);
-                                  }
-                                }}
-                                className="flex-1 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 text-[10px] font-bold rounded-lg border border-slate-800 transition flex items-center justify-center gap-1"
-                              >
-                                <Copy className="w-3 h-3 text-slate-400" />
-                                <span>{qrTokenCopied ? '¡Copiado!' : 'Copiar Token'}</span>
-                              </button>
+                            <div className="bg-white p-3 rounded-2xl inline-block shadow-xl mx-auto border border-slate-200">
+                              <img
+                                src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(generatedInviteQR)}`}
+                                alt="Código QR de Acceso"
+                                className="w-36 h-36 mx-auto"
+                              />
+                            </div>
 
+                            <div className="space-y-0.5 text-left bg-[#141417] p-2.5 rounded-xl border border-slate-800 text-[11px]">
+                              <p className="text-slate-400 font-mono text-[9px]">FOLIO / TOKEN: <strong className="text-emerald-400 font-mono">{generatedInviteQR}</strong></p>
+                              <p className="text-white font-bold">Visitante: {visitorName}</p>
+                              <p className="text-slate-300">Destino: {visitorCondo} {visitorPlate ? `| Auto: ${visitorPlate}` : ''}</p>
+                              {visitorPhone && (
+                                <p className="text-emerald-300 font-mono text-[10px]">WhatsApp: +52 {visitorPhone}</p>
+                              )}
+                            </div>
+
+                            {/* WhatsApp Direct Share Action */}
+                            <div className="space-y-2">
                               <a
-                                href={`https://api.qrserver.com/v1/create-qr-code/?size=350x350&data=${encodeURIComponent(generatedInviteQR)}`}
+                                href={waDirectUrl}
                                 target="_blank"
-                                download="pase-qr.png"
-                                className="flex-1 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 text-[10px] font-bold rounded-lg border border-slate-800 transition flex items-center justify-center gap-1 text-center"
+                                referrerPolicy="no-referrer"
+                                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50"
                               >
-                                <Download className="w-3 h-3 text-slate-400" />
-                                <span>Descargar QR</span>
+                                <Send className="w-4 h-4" />
+                                <span>{visitorPhone ? `Enviar a WhatsApp de ${visitorName}` : 'Compartir Pase por WhatsApp'}</span>
                               </a>
+
+                              <div className="grid grid-cols-2 gap-2">
+                                <a
+                                  href={waSelfUrl}
+                                  target="_blank"
+                                  referrerPolicy="no-referrer"
+                                  className="py-1.5 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
+                                >
+                                  <Home className="w-3 h-3" />
+                                  <span>Mi WhatsApp</span>
+                                </a>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedPassModal({
+                                      id: 'preview-pass',
+                                      visitorName: visitorName,
+                                      condo: visitorCondo,
+                                      type: visitorAccessType === 'visita' ? 'Visita Familiar' : 'Servicio',
+                                      plate: visitorPlate,
+                                      phone: visitorPhone,
+                                      token: generatedInviteQR,
+                                      validUntil: visitorValidity,
+                                      status: 'valido',
+                                      createdAt: new Date().toLocaleTimeString('es-MX')
+                                    });
+                                  }}
+                                  className="py-1.5 bg-blue-950/40 hover:bg-blue-900/60 border border-blue-500/30 text-blue-300 text-[10px] font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
+                                >
+                                  <Smartphone className="w-3 h-3" />
+                                  <span>Ver Pase Celular</span>
+                                </button>
+                              </div>
+
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (navigator.clipboard) {
+                                      navigator.clipboard.writeText(generatedInviteQR);
+                                      setQrTokenCopied(true);
+                                      setTimeout(() => setQrTokenCopied(false), 2000);
+                                    }
+                                  }}
+                                  className="flex-1 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 text-[10px] font-bold rounded-lg border border-slate-800 transition flex items-center justify-center gap-1"
+                                >
+                                  <Copy className="w-3 h-3 text-slate-400" />
+                                  <span>{qrTokenCopied ? '¡Copiado!' : 'Copiar Token'}</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveSubSection('guardia');
+                                    setTimeout(() => {
+                                      validateQrToken(generatedInviteQR);
+                                    }, 200);
+                                  }}
+                                  className="flex-1 py-1.5 bg-slate-900 hover:bg-slate-800 text-amber-300 text-[10px] font-bold rounded-lg border border-slate-800 transition flex items-center justify-center gap-1 cursor-pointer"
+                                >
+                                  <BadgeCheck className="w-3 h-3 text-amber-400" />
+                                  <span>Probar en Caseta</span>
+                                </button>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
                     </div>
 
                     {/* SUB-MODULE B: CREDENCIAL DIGITAL QR DEL RESIDENTE */}
@@ -6843,29 +7077,55 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
                             <div className="text-[10px] text-slate-400 space-y-0.5 font-sans">
                               <p>Motivo: <strong className="text-slate-200">{pass.type}</strong></p>
                               <p className="font-mono text-[9px]">Placas: {pass.plate} • Vigencia: {pass.validUntil}</p>
+                              {pass.phone && (
+                                <p className="font-mono text-[9px] text-emerald-400">WhatsApp: +52 {pass.phone}</p>
+                              )}
                               <p className="font-mono text-[8.5px] text-slate-500">Token: {pass.token}</p>
                             </div>
 
-                            {pass.status === 'valido' && (
-                              <div className="pt-1.5 border-t border-[#232328] flex items-center justify-between">
-                                <a
-                                  href={`https://wa.me/?text=${encodeURIComponent(`¡Hola! Te reenvío tu Pase QR para ingresar a ${pass.condo}: ${window.location.origin}${window.location.pathname}?pass=${pass.token}`)}`}
-                                  target="_blank"
-                                  referrerPolicy="no-referrer"
-                                  className="text-[9.5px] text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 cursor-pointer"
-                                >
-                                  <Send className="w-3 h-3" /> Reenviar
-                                </a>
+                            <div className="pt-1.5 border-t border-[#232328] flex items-center justify-between gap-2 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedPassModal(pass)}
+                                className="text-[9.5px] text-blue-400 hover:text-blue-300 font-bold flex items-center gap-1 cursor-pointer"
+                              >
+                                <Smartphone className="w-3 h-3" /> Ver Pase QR
+                              </button>
 
-                                <button
-                                  type="button"
-                                  onClick={() => handleRevokePass(pass.id)}
-                                  className="text-[9.5px] text-rose-400 hover:text-rose-300 font-bold flex items-center gap-1 cursor-pointer"
-                                >
-                                  <Trash2 className="w-3 h-3" /> Cancelar Pase
-                                </button>
-                              </div>
-                            )}
+                              {pass.status === 'valido' && (
+                                <>
+                                  {(() => {
+                                    const cleanP = (pass.phone || '').replace(/[^0-9]/g, '');
+                                    const formattedP = cleanP.length === 10 ? `52${cleanP}` : cleanP;
+                                    const waMsgItem = `🎫 *PASE DIGITAL VIGENTE - CONDOMINIO*\n` +
+                                      `Hola ${pass.visitorName}, te compartimos tu pase para ingresar a ${pass.condo}.\n\n` +
+                                      `📲 Folio: ${pass.token}\n` +
+                                      `🔗 Abre tu pase aquí: ${window.location.origin}${window.location.pathname}?pass=${encodeURIComponent(pass.token)}`;
+                                    const itemWaUrl = formattedP
+                                      ? `https://api.whatsapp.com/send?phone=${formattedP}&text=${encodeURIComponent(waMsgItem)}`
+                                      : `https://api.whatsapp.com/send?text=${encodeURIComponent(waMsgItem)}`;
+                                    return (
+                                      <a
+                                        href={itemWaUrl}
+                                        target="_blank"
+                                        referrerPolicy="no-referrer"
+                                        className="text-[9.5px] text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 cursor-pointer"
+                                      >
+                                        <Send className="w-3 h-3" /> WhatsApp
+                                      </a>
+                                    );
+                                  })()}
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRevokePass(pass.id)}
+                                    className="text-[9.5px] text-rose-400 hover:text-rose-300 font-bold flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Trash2 className="w-3 h-3" /> Cancelar
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -7221,42 +7481,133 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
 
                 {/* MODULE 1: ESCÁNER QR EN CASETA */}
                 <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-2xl p-5 space-y-4">
-                  <div>
-                    <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-widest font-mono">Control de Caseta</span>
-                    <h3 className="text-base font-black text-white mt-1">Escáner Lector QR Visitas</h3>
-                    <p className="text-xs text-slate-400 mt-0.5">Valida el pase dinámico generado por el residente.</p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-widest font-mono">Control de Caseta</span>
+                      <h3 className="text-base font-black text-white mt-0.5">Escáner Lector QR Visitas</h3>
+                      <p className="text-xs text-slate-400">Valida en tiempo real los pases QR de residentes y visitas.</p>
+                    </div>
+                    <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[9px] font-mono font-bold">
+                      Cámara Activa
+                    </span>
                   </div>
 
-                  <div className="bg-slate-950 border border-slate-900 rounded-2xl p-4 text-center space-y-3">
-                    <div className="relative w-full h-36 bg-slate-900 rounded-xl border-2 border-dashed border-emerald-500/40 flex flex-col items-center justify-center overflow-hidden">
-                      <QrCode className="w-12 h-12 text-emerald-400 animate-pulse" />
-                      <p className="text-[10px] text-slate-400 font-mono mt-2">Coloque el pase QR frente al escáner</p>
-                      <div className="absolute inset-x-0 top-0 h-0.5 bg-emerald-400 animate-bounce" style={{ animationDuration: '2s' }} />
+                  {/* Primary Action: Launch Mobile / Webcam Scanner */}
+                  <div className="space-y-3">
+                    <button
+                      type="button"
+                      onClick={() => setIsCameraScannerOpen(true)}
+                      className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-98 text-white font-black text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-2.5 shadow-xl shadow-emerald-950/60 border border-emerald-400/40"
+                    >
+                      <Camera className="w-5 h-5 text-emerald-200 animate-pulse" />
+                      <span>📷 Abrir Cámara y Escanear Pase QR</span>
+                    </button>
+
+                    {/* Quick simulation buttons for fast testing without camera */}
+                    <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2 text-left">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Pases listos para prueba:
+                        </span>
+                        <span className="text-[9px] text-slate-500 font-mono">1 clic para validar</span>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        {residentPassesList.slice(0, 2).map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => validateQrToken(p.token)}
+                            className="w-full p-2 bg-slate-900 hover:bg-emerald-950/40 text-slate-300 hover:text-emerald-300 text-[10px] font-bold rounded-lg border border-slate-800 hover:border-emerald-500/30 transition text-left flex items-center justify-between cursor-pointer"
+                          >
+                            <span className="truncate max-w-[170px]">{p.visitorName} ({p.condo})</span>
+                            <span className="text-[8.5px] font-mono text-emerald-400 shrink-0">Simular Escaneo →</span>
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => validateQrToken('CNLS-RESIDENT-MARIANA-SILVA-CASA105-V2026')}
+                          className="w-full p-2 bg-slate-900 hover:bg-blue-950/40 text-slate-300 hover:text-blue-300 text-[10px] font-bold rounded-lg border border-slate-800 hover:border-blue-500/30 transition text-left flex items-center justify-between cursor-pointer"
+                        >
+                          <span className="truncate max-w-[170px]">Mariana Silva (Carnet Residente)</span>
+                          <span className="text-[8.5px] font-mono text-blue-400 shrink-0">Carnet QR →</span>
+                        </button>
+                      </div>
                     </div>
 
+                    {/* Manual token input */}
                     <div className="space-y-2">
-                      <input
-                        type="text"
-                        value={scannerInput}
-                        onChange={(e) => setScannerInput(e.target.value)}
-                        placeholder="O ingresa token (ej: QR-89421)"
-                        className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white text-xs font-mono text-center uppercase"
-                      />
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={scannerInput}
+                          onChange={(e) => setScannerInput(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && simulateQrScan()}
+                          placeholder="O pega / teclea el folio QR (ej: CNLS-PASS-C105-9921)"
+                          className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs font-mono text-center uppercase placeholder-slate-600 focus:border-emerald-500 focus:outline-hidden"
+                        />
+                      </div>
                       <button
+                        type="button"
                         onClick={simulateQrScan}
-                        className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5"
+                        className="w-full py-2 bg-slate-900 hover:bg-slate-850 text-slate-200 font-bold text-xs rounded-xl border border-slate-800 transition cursor-pointer flex items-center justify-center gap-1.5"
                       >
-                        <CheckCircle2 className="w-4 h-4" /> Validar Acceso Instantáneo
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Validar Folio Manual
                       </button>
                     </div>
 
+                    {/* Scan Result Feedback Card */}
                     {scanResult && (
-                      <div className={`p-3 rounded-xl border text-[10px] leading-relaxed font-mono ${
+                      <div className={`p-3.5 rounded-2xl border text-xs space-y-2 font-sans text-left transition animate-fade-in ${
                         scanResult.type === 'success'
-                          ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300'
-                          : 'bg-rose-950/30 border-rose-500/40 text-rose-300'
+                          ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-200'
+                          : 'bg-rose-950/40 border-rose-500/50 text-rose-200'
                       }`}>
-                        {scanResult.msg}
+                        <div className="flex items-center gap-2 font-bold text-xs">
+                          {scanResult.type === 'success' ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                          ) : (
+                            <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
+                          )}
+                          <span>{scanResult.msg}</span>
+                        </div>
+
+                        {scannedPassDetails && (
+                          <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800 text-[11px] text-slate-300 space-y-1">
+                            <p><strong className="text-white">Visitante:</strong> {scannedPassDetails.visitorName}</p>
+                            <p><strong className="text-white">Destino:</strong> {scannedPassDetails.condo}</p>
+                            <p><strong className="text-white">Vehículo / Placas:</strong> {scannedPassDetails.plate || 'Peatonal'}</p>
+                            <p className="text-slate-400 font-mono text-[9px]">Folio: {scannedPassDetails.token}</p>
+                          </div>
+                        )}
+
+                        {/* Vehicular Barrier Controls */}
+                        {scanResult.type === 'success' && (
+                          <div className="pt-2 border-t border-emerald-500/20 space-y-2">
+                            <div className="flex items-center justify-between text-[10px] font-mono">
+                              <span className="text-slate-300">Barrera Vehicular:</span>
+                              <span className={`px-2 py-0.5 rounded font-bold uppercase ${
+                                barrierStatus === 'open' ? 'bg-emerald-500 text-white animate-pulse' :
+                                barrierStatus === 'opening' || barrierStatus === 'closing' ? 'bg-amber-500 text-white' :
+                                'bg-slate-800 text-slate-300'
+                              }`}>
+                                {barrierStatus === 'open' ? '🟢 PLUMA ABIERTA' :
+                                 barrierStatus === 'opening' ? '🟡 ELEVANDO...' :
+                                 barrierStatus === 'closing' ? '🟡 BAJANDO...' :
+                                 '🚧 PLUMA CERRADA'}
+                              </span>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={handleOpenBarrier}
+                              disabled={barrierStatus !== 'closed'}
+                              className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 text-white font-black text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-emerald-950/40"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>{barrierStatus === 'closed' ? 'Abrir Pluma de Caseta' : 'Accionando Barrera...'}</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -8247,6 +8598,39 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
         egresos={egresos}
         unidades={unidadesParaReporte}
         infracciones={infracciones}
+      />
+
+      {/* MODAL: ESCÁNER QR CON CÁMARA (MÓVIL / WEBCAM) */}
+      <CameraQrScanner
+        isOpen={isCameraScannerOpen}
+        onClose={() => setIsCameraScannerOpen(false)}
+        onScan={(token) => {
+          setIsCameraScannerOpen(false);
+          validateQrToken(token);
+        }}
+        sampleTokens={[
+          ...residentPassesList.slice(0, 3).map(p => ({
+            label: `${p.visitorName} (${p.condo})`,
+            token: p.token
+          })),
+          {
+            label: 'Mariana Silva (Carnet Residente)',
+            token: 'CNLS-RESIDENT-MARIANA-SILVA-CASA105-V2026'
+          }
+        ]}
+      />
+
+      {/* MODAL: PASE DE ENTRADA DIGITAL DEL VISITANTE */}
+      <VisitorPassModal
+        pass={selectedPassModal}
+        onClose={() => setSelectedPassModal(null)}
+        onSimulateGuardScan={(token) => {
+          setSelectedPassModal(null);
+          setActiveSubSection('guardia');
+          setTimeout(() => {
+            validateQrToken(token);
+          }, 300);
+        }}
       />
 
     </div>
