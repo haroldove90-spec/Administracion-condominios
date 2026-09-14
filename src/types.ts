@@ -259,4 +259,22 @@ export interface PaymentRecord {
   paymentDate?: string;
 }
 
+export interface RegistroAcceso {
+  id: string;
+  fechaHora: string;
+  fecha: string;
+  hora: string;
+  token: string;
+  visitanteNombre: string;
+  condoDestino: string;
+  residenteAnfitrion: string;
+  placas: string;
+  tipoVisita: string;
+  metodo: 'Cámara QR' | 'Folio Manual' | 'Simulación Caseta';
+  resultado: 'Autorizado' | 'Denegado' | 'Revocado' | 'Pase Usado';
+  guardiaNombre: string;
+  observaciones?: string;
+  barreraAccionada: boolean;
+}
+
 
