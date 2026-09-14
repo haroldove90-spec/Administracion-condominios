@@ -264,25 +264,45 @@ export default function CameraQrScanner({
             </div>
           )}
 
-          {/* Camera Error Message */}
+          {/* Camera Error / Permission Request Box */}
           {hasCameraError && (
-            <div className="absolute inset-0 bg-slate-950/90 p-6 flex flex-col items-center justify-center text-center space-y-3">
-              <AlertCircle className="w-10 h-10 text-amber-400" />
-              <p className="text-sm font-bold text-white max-w-xs">{hasCameraError}</p>
-              <div className="flex flex-wrap gap-2 justify-center pt-2">
+            <div className="absolute inset-0 bg-slate-950/95 p-6 flex flex-col items-center justify-center text-center space-y-3.5 animate-fade-in z-20">
+              <div className="w-14 h-14 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center justify-center shadow-lg shadow-amber-500/20">
+                <Camera className="w-7 h-7" />
+              </div>
+              <div className="space-y-1 max-w-sm">
+                <h4 className="text-sm font-black text-white">
+                  Permiso de Cámara Requerido para Control de Accesos
+                </h4>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Para escanear códigos QR y autorizar el acceso de visitantes a la residencia en caseta, el sistema necesita permiso para usar la cámara de tu dispositivo móvil.
+                </p>
+              </div>
+
+              <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl text-[11px] text-slate-400 max-w-sm text-left space-y-1">
+                <p className="font-bold text-amber-400 flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5" /> ¿Cómo habilitar en tu teléfono?
+                </p>
+                <p>• <strong>En Android (Chrome):</strong> Toca el candado 🔒 en la barra de direcciones → Permisos → Cámara → Permitir.</p>
+                <p>• <strong>En iPhone (Safari):</strong> Toca "aA" en la barra de direcciones → Ajustes del sitio web → Cámara → Permitir.</p>
+              </div>
+
+              <div className="flex flex-wrap gap-2 justify-center pt-1 w-full max-w-xs">
                 <button
                   type="button"
                   onClick={startCamera}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5"
+                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50"
                 >
-                  <RefreshCw className="w-3.5 h-3.5" /> Reintentar Cámara
+                  <Camera className="w-4 h-4" />
+                  <span>Solicitar Permiso de Cámara Ahora</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5"
+                  className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl border border-slate-700 transition cursor-pointer flex items-center justify-center gap-2"
                 >
-                  <ImageIcon className="w-3.5 h-3.5" /> Subir Foto de QR
+                  <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Subir Foto del QR desde Galería</span>
                 </button>
               </div>
             </div>

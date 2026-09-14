@@ -19,6 +19,7 @@ import { VehiculosMascotasManager } from './VehiculosMascotasManager';
 import { ReporteFinancieroAsamblea } from './ReporteFinancieroAsamblea';
 import CameraQrScanner from './CameraQrScanner';
 import VisitorPassModal, { VisitorPassData } from './VisitorPassModal';
+import SimuladorConciliacionBancaria, { BankStatementMovement } from './SimuladorConciliacionBancaria';
 
 interface Payment {
   id: string;
@@ -1680,7 +1681,8 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
   const [bncSearchQuery, setBncSearchQuery] = useState('');
   const [viewingReciboBnc, setViewingReciboBnc] = useState<ConciliacionBancaria | null>(null);
   const [showBncAddForm, setShowBncAddForm] = useState(false);
-  const [showBncInstructions, setShowBncInstructions] = useState(true);
+  const [showBncInstructions, setShowBncInstructions] = useState(false);
+  const [showSimuladorBnc, setShowSimuladorBnc] = useState(true);
 
   // 6. Egresos & Nóminas
   const [egresos, setEgresos] = useState<EgresoCondominio[]>(() => getIsMockDisabled() ? [] : [
@@ -2426,6 +2428,44 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
     ];
     setBancoMovimientos(prev => [...demoItems, ...prev]);
     showSuccessBanner('✓ Movimientos bancarios de demostración cargados.');
+  };
+
+  const handleApplySimuladorConciliacion = (movimientos: BankStatementMovement[]) => {
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const abonos = movimientos.filter(m => m.tipo === 'abono');
+    
+    const newBncItems: ConciliacionBancaria[] = abonos.map((mov, idx) => ({
+      id: `bnc-sim-${Date.now()}-${idx}`,
+      fecha: mov.fecha,
+      conceptoBanco: mov.concepto,
+      monto: mov.monto,
+      referencia: mov.referencia,
+      estatus: 'conciliado',
+      unidadMatcheada: mov.unidadSugerida,
+      folioRecibo: `REC-${mov.referencia}`,
+      fechaConciliacion: now
+    }));
+
+    setBancoMovimientos(prev => {
+      const existingRefs = new Set(newBncItems.map(n => n.referencia));
+      const filteredPrev = prev.filter(p => !existingRefs.has(p.referencia));
+      return [...newBncItems, ...filteredPrev];
+    });
+
+    const matchedUnits = new Set(abonos.map(a => a.unidadSugerida.toLowerCase().trim()));
+    setPayments(prev => prev.map(p => {
+      if (matchedUnits.has(p.condo.toLowerCase().trim()) || matchedUnits.has(p.resident.toLowerCase().trim())) {
+        return {
+          ...p,
+          status: 'pagado',
+          paymentMethod: 'SPEI Conciliado Simulador',
+          paymentDate: new Date().toISOString().split('T')[0]
+        };
+      }
+      return p;
+    }));
+
+    showSuccessBanner(`✓ ¡Simulación ejecutada con éxito! Se conciliarion ${abonos.length} depósitos bancarios SPEI.`);
   };
 
   const handleExportarConciliacionCSV = () => {
@@ -5558,6 +5598,14 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
               {/* Action Buttons */}
               <div className="flex flex-wrap items-center gap-2">
                 <button
+                  type="button"
+                  onClick={() => setShowSimuladorBnc(!showSimuladorBnc)}
+                  className="px-3.5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-black rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-lg shadow-purple-950/50"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span>{showSimuladorBnc ? 'Ocultar Simulador PDF/Excel' : '⚡ Simulación PDF & Excel'}</span>
+                </button>
+                <button
                   onClick={() => setShowBncAddForm(!showBncAddForm)}
                   className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-lg shadow-emerald-950/40"
                 >
@@ -5566,9 +5614,9 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
                 </button>
                 <button
                   onClick={handleAutoConciliar}
-                  className="px-3.5 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-lg shadow-purple-950/40"
+                  className="px-3.5 py-2 bg-[#141417] hover:bg-[#25252B] text-purple-300 hover:text-purple-200 text-xs font-bold rounded-xl border border-purple-500/30 transition cursor-pointer flex items-center gap-1.5"
                 >
-                  <Sparkles className="w-3.5 h-3.5" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-purple-400" />
                   <span>Auto-Conciliar ⚡</span>
                 </button>
                 <button
@@ -5587,13 +5635,24 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
                 </button>
                 <button
                   onClick={() => setShowBncInstructions(!showBncInstructions)}
-                  className="px-3 py-2 bg-[#141417] hover:bg-[#25252B] text-purple-300 hover:text-purple-200 text-xs font-bold rounded-xl border border-purple-500/30 transition cursor-pointer flex items-center gap-1.5"
+                  className="px-3 py-2 bg-[#141417] hover:bg-[#25252B] text-slate-300 hover:text-white text-xs font-bold rounded-xl border border-[#2d2d32] transition cursor-pointer flex items-center gap-1.5"
                 >
-                  <BookOpen className="w-3.5 h-3.5" />
+                  <BookOpen className="w-3.5 h-3.5 text-slate-400" />
                   <span>{showBncInstructions ? 'Ocultar Guía' : 'Ver Guía'}</span>
                 </button>
               </div>
             </div>
+
+            {/* SIMULADOR DE CONCILIACIÓN BANCARIA CON DESCARGA Y SUBIDA DE PDF / EXCEL */}
+            {showSimuladorBnc && (
+              <SimuladorConciliacionBancaria
+                onApplyConciliacion={handleApplySimuladorConciliacion}
+                availableUnits={Array.from(new Set([
+                  ...residentesCat.map(r => r.unidad),
+                  ...payments.map(p => p.condo)
+                ])).filter(Boolean)}
+              />
+            )}
 
             {/* Guía Rápida: Instrucciones Básicas para la Conciliación Bancaria */}
             {showBncInstructions && (

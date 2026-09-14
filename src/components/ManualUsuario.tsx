@@ -146,6 +146,10 @@ export const ManualUsuario: React.FC<ManualUsuarioProps> = ({ onGoToTab }) => {
         {
           title: 'Paso 5: Reversión y Exportación',
           text: 'Si cometiste un error, presiona "Revertir ↺" para desconciliar el pago. Además, puedes presionar "Exportar a Excel / CSV 📊" para entregar el reporte financiero al Comité de Vigilancia.'
+        },
+        {
+          title: 'Paso 6: Simulador de Estado de Cuenta PDF/Excel para Clientes',
+          text: 'Utiliza el simulador integrado en la parte superior para generar y descargar un PDF bancario ficticio oficial (estilo BBVA/Banorte) o un archivo Excel, subirlo al sistema y demostrar en vivo la conciliación automatizada a tu cliente o asamblea.'
         }
       ],
       tip: 'Solicita a los residentes colocar siempre el número de su departamento (ej. "D-102") en el concepto de su transferencia SPEI para que la auto-conciliación sea 100% inmediata.'

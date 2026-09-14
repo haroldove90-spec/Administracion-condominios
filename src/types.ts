@@ -235,3 +235,28 @@ export interface MascotaCondominio {
   observaciones?: string;
 }
 
+export interface ConciliacionBancaria {
+  id: string;
+  fecha: string;
+  conceptoBanco: string;
+  monto: number;
+  referencia: string;
+  estatus: 'pendiente' | 'conciliado';
+  unidadMatcheada?: string;
+  folioRecibo?: string;
+  fechaConciliacion?: string;
+}
+
+export interface PaymentRecord {
+  id: string;
+  condo: string;
+  resident: string;
+  concept: string;
+  amount: number;
+  dueDate: string;
+  status: 'pagado' | 'pendiente' | 'vencido';
+  paymentMethod?: string;
+  paymentDate?: string;
+}
+
+
