@@ -18,31 +18,36 @@ interface LoginViewProps {
 }
 
 export const SUPABASE_AUTH_SQL = `-- ========================================================
--- TABLA DE ROLES Y USUARIOS DEL SISTEMA (Supabase SQL)
+-- SCRIPT CORREGIDO Y COMPATIBLE PARA SUPABASE
+-- Plataforma: Administración de Condominios
 -- ========================================================
 
+-- 1. Crear tabla si no existe
 CREATE TABLE IF NOT EXISTS public.system_roles (
     uid TEXT PRIMARY KEY,
-    username TEXT UNIQUE NOT NULL,
+    username TEXT,
     email TEXT,
-    password TEXT NOT NULL,
-    name TEXT NOT NULL,
-    role TEXT NOT NULL DEFAULT 'admin',
+    password TEXT,
+    name TEXT,
+    role TEXT DEFAULT 'admin',
     is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now(),
-    phone TEXT,
-    residencia_id TEXT,
-    residencia_nombre TEXT,
-    caseta_id TEXT,
-    caseta_nombre TEXT,
-    avatar TEXT
+    created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Habilitar Row Level Security (RLS)
+-- 2. Asegurar que las columnas necesarias existan en caso de que la tabla ya existiera previamente
+ALTER TABLE public.system_roles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+ALTER TABLE public.system_roles ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+ALTER TABLE public.system_roles ADD COLUMN IF NOT EXISTS password TEXT;
+ALTER TABLE public.system_roles ADD COLUMN IF NOT EXISTS username TEXT;
+ALTER TABLE public.system_roles ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'admin';
+ALTER TABLE public.system_roles ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE public.system_roles ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.system_roles ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
+
+-- 3. Habilitar Seguridad a Nivel de Fila (RLS)
 ALTER TABLE public.system_roles ENABLE ROW LEVEL SECURITY;
 
--- Políticas de Seguridad RLS
+-- 4. Políticas de acceso para lectura y escritura
 DROP POLICY IF EXISTS "Permitir lectura de system_roles" ON public.system_roles;
 CREATE POLICY "Permitir lectura de system_roles" ON public.system_roles
     FOR SELECT USING (true);
@@ -51,11 +56,12 @@ DROP POLICY IF EXISTS "Permitir insercion y actualizacion de system_roles" ON pu
 CREATE POLICY "Permitir insercion y actualizacion de system_roles" ON public.system_roles
     FOR ALL USING (true);
 
--- ========================================================
--- CREACIÓN DE LAS CREDENCIALES PRIVADAS SOLICITADAS
--- ========================================================
+-- 5. Limpiar registros previos con estos usuarios para evitar duplicados
+DELETE FROM public.system_roles 
+WHERE username IN ('admin1', 'haroldo90') 
+   OR uid IN ('admin-admin1-uid', 'admin-haroldo90-uid');
 
--- 1. Usuario: admin1 | Clave: Chevropar#1970
+-- 6. Insertar las credenciales solicitadas
 INSERT INTO public.system_roles (
     uid,
     username,
@@ -64,8 +70,10 @@ INSERT INTO public.system_roles (
     name,
     role,
     is_active,
-    created_at
-) VALUES (
+    created_at,
+    updated_at
+) VALUES 
+(
     'admin-admin1-uid',
     'admin1',
     'admin1@condominios.mx',
@@ -73,26 +81,10 @@ INSERT INTO public.system_roles (
     'Administrador Principal (admin1)',
     'admin',
     true,
+    now(),
     now()
-)
-ON CONFLICT (username) DO UPDATE SET
-    password = EXCLUDED.password,
-    role = EXCLUDED.role,
-    name = EXCLUDED.name,
-    is_active = true,
-    updated_at = now();
-
--- 2. Usuario: haroldo90 | Contraseña: Chevropar#1970
-INSERT INTO public.system_roles (
-    uid,
-    username,
-    email,
-    password,
-    name,
-    role,
-    is_active,
-    created_at
-) VALUES (
+),
+(
     'admin-haroldo90-uid',
     'haroldo90',
     'haroldo90@condominios.mx',
@@ -100,18 +92,21 @@ INSERT INTO public.system_roles (
     'Haroldo Anguiano (haroldo90)',
     'admin',
     true,
+    now(),
     now()
-)
-ON CONFLICT (username) DO UPDATE SET
-    password = EXCLUDED.password,
-    role = EXCLUDED.role,
-    name = EXCLUDED.name,
-    is_active = true,
-    updated_at = now();
+);
 
--- Confirmación de los usuarios registrados
-SELECT username, name, role, email, is_active, created_at 
-FROM public.system_roles 
+-- ========================================================
+-- 7. VERIFICAR QUE SE HAYAN CREADO CORRECTAMENTE
+-- ========================================================
+SELECT 
+    uid,
+    username,
+    name,
+    role,
+    password,
+    is_active
+FROM public.system_roles
 WHERE username IN ('admin1', 'haroldo90');
 `;
 
