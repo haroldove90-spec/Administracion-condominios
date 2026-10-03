@@ -310,6 +310,8 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
     currentUser.role === 'condominios' || 
     currentUser.role === 'superadmin' || 
     currentUser.username === 'admin' || 
+    currentUser.username === 'admin1' || 
+    currentUser.username === 'haroldo90' || 
     currentUser.username === 'admin_condo' || 
     currentUser.username === 'harold.anguiano' ||
     (typeof currentUser.role === 'string' && currentUser.role.toLowerCase().includes('admin'));

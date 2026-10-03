@@ -32,7 +32,7 @@ export default function App() {
   });
 
   const [userRole, setUserRole] = useState<SystemRole | null>(() => {
-    // Check if explicitly logged out
+    // Check if explicitly logged out or needs fresh login
     const loggedOut = localStorage.getItem('cnls_logged_out');
     if (loggedOut === 'true') {
       return null;
@@ -41,7 +41,11 @@ export default function App() {
     try {
       if (saved) {
         const parsed = JSON.parse(saved);
-        return parsed;
+        // Do not auto-login old dummy placeholder uid
+        if (parsed && parsed.uid !== 'admin-condo-uid') {
+          return parsed;
+        }
+        localStorage.removeItem('cnls_user_role');
       }
       return null;
     } catch {
@@ -51,7 +55,7 @@ export default function App() {
 
   const [initialSubSection, setInitialSubSection] = useState<'inicio' | 'superadmin' | 'admininmobiliaria' | 'comite' | 'residente' | 'guardia'>('inicio');
   const [loggedOutNotice, setLoggedOutNotice] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(false);
 
   // Online / Offline Internet Connectivity State Enforcer
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
@@ -94,20 +98,18 @@ export default function App() {
           if (savedUserRoleJson) {
             try {
               const parsed = JSON.parse(savedUserRoleJson);
-              setUserRole(parsed);
-            } catch {}
+              if (parsed && parsed.uid !== 'admin-condo-uid') {
+                setUserRole(parsed);
+              } else {
+                localStorage.removeItem('cnls_user_role');
+                setUserRole(null);
+              }
+            } catch {
+              setUserRole(null);
+            }
           } else {
-            // Default SuperAdmin / Admin role for Condominios administration
-            const defaultRole: SystemRole = {
-              uid: 'admin-condo-uid',
-              name: 'Harold Anguiano (Administrador)',
-              email: 'harold.anguiano@condominios.mx',
-              username: 'harold.anguiano',
-              role: SystemUserRole.ADMIN,
-              createdAt: new Date().toISOString()
-            };
-            setUserRole(defaultRole);
-            localStorage.setItem('cnls_user_role', JSON.stringify(defaultRole));
+            // Private system: require login via credentials form
+            setUserRole(null);
           }
         } catch (err) {
           console.error('Error initializing user role:', err);

@@ -776,13 +776,23 @@ const LocalDB = {
     const data = localStorage.getItem(LS_ROLES_KEY);
     const defaultRoles: SystemRole[] = [
       {
-        uid: 'admin-demo-uid',
-        name: 'Jonathan Canales Ortiz',
-        email: 'canalesjonathan7777@gmail.com',
-        username: 'canalesjonathan7777',
+        uid: 'admin-admin1-uid',
+        name: 'Administrador 1',
+        email: 'admin1@condominios.mx',
+        username: 'admin1',
         role: SystemUserRole.ADMIN,
         isActive: true,
-        password: '@s5Qk4eSkPCxm0',
+        password: 'Chevropar#1970',
+        createdAt: new Date().toISOString(),
+      },
+      {
+        uid: 'admin-haroldo90-uid',
+        name: 'Haroldo Anguiano',
+        email: 'haroldo90@condominios.mx',
+        username: 'haroldo90',
+        role: SystemUserRole.ADMIN,
+        isActive: true,
+        password: 'Chevropar#1970',
         createdAt: new Date().toISOString(),
       },
       {
