@@ -13,13 +13,19 @@ import confetti from 'canvas-confetti';
 import { supabase } from '../supabase';
 import { dbService } from '../services/dbService';
 import { ManualUsuario } from './ManualUsuario';
-import { InfraccionMulta, VehiculoCondominio, MascotaCondominio } from '../types';
+import { InfraccionMulta, VehiculoCondominio, MascotaCondominio, RegistroAcceso } from '../types';
 import { InfraccionesMultasManager } from './InfraccionesMultasManager';
 import { VehiculosMascotasManager } from './VehiculosMascotasManager';
 import { ReporteFinancieroAsamblea } from './ReporteFinancieroAsamblea';
 import CameraQrScanner from './CameraQrScanner';
 import VisitorPassModal, { VisitorPassData } from './VisitorPassModal';
 import SimuladorConciliacionBancaria, { BankStatementMovement } from './SimuladorConciliacionBancaria';
+import {
+  downloadPassImage,
+  sharePassImageOrFallback,
+  copyPassImageToClipboard,
+  getCleanWhatsAppText
+} from '../utils/passImageGenerator';
 
 interface Payment {
   id: string;
@@ -289,7 +295,7 @@ export default function CondominiosDashboard({ currentUser, onSignOut, initialSu
   const [isReporteAsambleaOpen, setIsReporteAsambleaOpen] = useState<boolean>(false);
   const [comiteTab, setComiteTab] = useState<'auditoria' | 'aprobaciones' | 'actas'>('auditoria');
   const [residenteTab, setResidenteTab] = useState<'finanzas' | 'accesos' | 'amenidades' | 'comunicacion'>('accesos');
-  const [guardiaTab, setGuardiaTab] = useState<'accesos' | 'paqueteria' | 'bitacora'>('accesos');
+  const [guardiaTab, setGuardiaTab] = useState<'escaner' | 'bitacora' | 'interfon_paqueteria'>('escaner');
   const [superAdminTab, setSuperAdminTab] = useState<'clientes' | 'finanzas' | 'soporte'>('clientes');
   const [isNavOpen, setIsNavOpen] = useState<boolean>(false);
 
@@ -1354,44 +1360,118 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
     validUntil: string;
     status: 'valido' | 'usado' | 'revocado';
     createdAt: string;
-  }>>(() => [
-    {
-      id: 'pass-1',
-      visitorName: 'Ing. Roberto Martínez',
-      condo: 'Casa 105',
-      type: 'Técnico / Proveedor',
-      plate: 'JNY-4921',
-      phone: '5541982310',
-      token: 'CNLS-PASS-C105-9921',
-      validUntil: 'Hoy 23:59',
-      status: 'valido',
-      createdAt: '2026-07-20 10:15'
-    },
-    {
-      id: 'pass-2',
-      visitorName: 'Familia Morales',
-      condo: 'Casa 105',
-      type: 'Visita Familiar',
-      plate: 'PGB-7741',
-      phone: '3318293041',
-      token: 'CNLS-PASS-C105-8834',
-      validUntil: '2026-07-22',
-      status: 'valido',
-      createdAt: '2026-07-19 18:30'
-    },
-    {
-      id: 'pass-3',
-      visitorName: 'Repartidor Uber Eats',
-      condo: 'Casa 105',
-      type: 'Delivery / Comida',
-      plate: 'Moto 44-MN',
-      phone: '5577665544',
-      token: 'CNLS-PASS-C105-3310',
-      validUntil: '1 solo acceso',
-      status: 'usado',
-      createdAt: '2026-07-19 14:10'
+    hostName?: string;
+  }>>(() => {
+    const saved = localStorage.getItem('cnls_resident_passes');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
     }
-  ]);
+    return [
+      {
+        id: 'pass-1',
+        visitorName: 'Ing. Roberto Martínez',
+        condo: 'Casa 105',
+        type: 'Técnico / Proveedor',
+        plate: 'JNY-4921',
+        phone: '5541982310',
+        token: 'CNLS-PASS-C105-9921',
+        validUntil: 'Hoy 23:59',
+        status: 'valido',
+        createdAt: '2026-07-20 10:15',
+        hostName: 'Mariana Silva (Casa 105)'
+      },
+      {
+        id: 'pass-2',
+        visitorName: 'Familia Morales',
+        condo: 'Casa 105',
+        type: 'Visita Familiar',
+        plate: 'PGB-7741',
+        phone: '3318293041',
+        token: 'CNLS-PASS-C105-8834',
+        validUntil: '2026-07-22',
+        status: 'valido',
+        createdAt: '2026-07-19 18:30',
+        hostName: 'Mariana Silva (Casa 105)'
+      },
+      {
+        id: 'pass-3',
+        visitorName: 'Repartidor Uber Eats',
+        condo: 'Casa 105',
+        type: 'Delivery / Comida',
+        plate: 'Moto 44-MN',
+        phone: '5577665544',
+        token: 'CNLS-PASS-C105-3310',
+        validUntil: '1 solo acceso',
+        status: 'usado',
+        createdAt: '2026-07-19 14:10',
+        hostName: 'Mariana Silva (Casa 105)'
+      }
+    ];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('cnls_resident_passes', JSON.stringify(residentPassesList));
+  }, [residentPassesList]);
+
+  // Persistent Historical Access Records (Bitácora de Accesos de Caseta)
+  const [registrosAccesos, setRegistrosAccesos] = useState<RegistroAcceso[]>(() => {
+    const saved = localStorage.getItem('cnls_registros_accesos');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    return [
+      {
+        id: 'acc-init-1',
+        fechaHora: '2026-07-20 10:18:22',
+        fecha: '2026-07-20',
+        hora: '10:18:22',
+        token: 'CNLS-PASS-C105-9921',
+        visitanteNombre: 'Ing. Roberto Martínez',
+        condoDestino: 'Casa 105',
+        residenteAnfitrion: 'Mariana Silva (Casa 105)',
+        placas: 'JNY-4921',
+        tipoVisita: 'Técnico / Proveedor',
+        metodo: 'Cámara QR',
+        resultado: 'Autorizado',
+        guardiaNombre: 'Oficial Caseta de Vigilancia',
+        observaciones: 'Ingreso vehicular autorizado. Pluma abierta.',
+        barreraAccionada: true
+      },
+      {
+        id: 'acc-init-2',
+        fechaHora: '2026-07-19 14:15:04',
+        fecha: '2026-07-19',
+        hora: '14:15:04',
+        token: 'CNLS-PASS-C105-3310',
+        visitanteNombre: 'Repartidor Uber Eats',
+        condoDestino: 'Casa 105',
+        residenteAnfitrion: 'Mariana Silva (Casa 105)',
+        placas: 'Moto 44-MN',
+        tipoVisita: 'Delivery / Comida',
+        metodo: 'Folio Manual',
+        resultado: 'Autorizado',
+        guardiaNombre: 'Oficial Caseta de Vigilancia',
+        observaciones: 'Pase de un solo uso consumido. Ingreso en motocicleta.',
+        barreraAccionada: true
+      }
+    ];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('cnls_registros_accesos', JSON.stringify(registrosAccesos));
+  }, [registrosAccesos]);
+
+  // Guardia Filter states
+  const [filterAccesoQuery, setFilterAccesoQuery] = useState('');
+  const [filterAccesoResultado, setFilterAccesoResultado] = useState<'todos' | 'Autorizado' | 'Denegado' | 'Revocado' | 'Pase Usado'>('todos');
+  const [filterAccesoFecha, setFilterAccesoFecha] = useState('');
+  const [selectedAccesoDetail, setSelectedAccesoDetail] = useState<RegistroAcceso | null>(null);
 
   // Biometrics
   const [biometricScanning, setBiometricScanning] = useState(false);
@@ -1424,11 +1504,18 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
   const [parcelCarrier, setParcelCarrier] = useState('');
   const [parcelTracking, setParcelTracking] = useState('');
 
-  const validateQrToken = (tokenToVerify?: string) => {
+  const validateQrToken = (tokenToVerify?: string, customMethod?: 'Cámara QR' | 'Folio Manual' | 'Simulación Caseta') => {
     const rawToken = (tokenToVerify || scannerInput || '').trim();
     if (!rawToken) return;
 
     setScannerInput(rawToken);
+    const methodUsed: 'Cámara QR' | 'Folio Manual' | 'Simulación Caseta' = 
+      customMethod || (tokenToVerify ? 'Cámara QR' : 'Folio Manual');
+
+    const now = new Date();
+    const fecha = now.toISOString().split('T')[0];
+    const hora = now.toLocaleTimeString('es-MX', { hour12: false });
+    const fechaHora = `${fecha} ${hora}`;
 
     // 1. Search in passes list
     const foundPass = residentPassesList.find(p => p.token.toUpperCase() === rawToken.toUpperCase());
@@ -1436,20 +1523,87 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
 
     if (foundPass) {
       if (foundPass.status === 'revocado') {
+        const errorMsg = `⛔ ACCESO DENEGADO: El pase con folio "${rawToken}" fue cancelado o REVOCADO por el residente/administración.`;
         setScanResult({
           type: 'error',
-          msg: `⛔ ACCESO DENEGADO: El pase con folio "${rawToken}" fue cancelado o REVOCADO por el residente/administración.`
+          msg: errorMsg
         });
         setScannedPassDetails(null);
+
+        // Guardar en Bitácora y Registro Histórico de Acceso
+        const regRevocado: RegistroAcceso = {
+          id: `acc-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          fechaHora,
+          fecha,
+          hora,
+          token: rawToken,
+          visitanteNombre: foundPass.visitorName,
+          condoDestino: foundPass.condo,
+          residenteAnfitrion: foundPass.hostName || 'Mariana Silva (Casa 105)',
+          placas: foundPass.plate || 'Peatonal',
+          tipoVisita: foundPass.type,
+          metodo: methodUsed,
+          resultado: 'Revocado',
+          guardiaNombre: 'Oficial Caseta de Seguridad',
+          observaciones: 'Acceso rechazado en caseta: Pase revocado por el residente.',
+          barreraAccionada: false
+        };
+        setRegistrosAccesos(prev => [regRevocado, ...prev]);
+
+        setBitacoraGuardia(prev => [{
+          id: `bit-${Date.now()}`,
+          guardiaNombre: 'Oficial Caseta de Seguridad',
+          tipo: 'Incidencia',
+          descripcion: `[Escáner] ⛔ Acceso DENEGADO (Pase Revocado): ${foundPass.visitorName} -> ${foundPass.condo} (Folio: ${rawToken})`,
+          fechaHora
+        }, ...prev]);
+
+        setIntercomLogs(prev => [
+          `[${hora}] ⛔ Acceso DENEGADO: ${foundPass.visitorName} (Pase REVOCADO) [Folio: ${rawToken}]`,
+          ...prev
+        ]);
         return;
       }
 
       if (foundPass.status === 'usado' && foundPass.validUntil.toLowerCase().includes('1 solo')) {
+        const errorMsg = `⚠️ ACCESO RECHAZADO: Este pase ya fue UTILIZADO anteriormente (Vigencia de 1 solo uso).`;
         setScanResult({
           type: 'error',
-          msg: `⚠️ ACCESO RECHAZADO: Este pase ya fue UTILIZADO anteriormente (Vigencia de 1 solo uso).`
+          msg: errorMsg
         });
         setScannedPassDetails(null);
+
+        const regUsado: RegistroAcceso = {
+          id: `acc-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          fechaHora,
+          fecha,
+          hora,
+          token: rawToken,
+          visitanteNombre: foundPass.visitorName,
+          condoDestino: foundPass.condo,
+          residenteAnfitrion: foundPass.hostName || 'Mariana Silva (Casa 105)',
+          placas: foundPass.plate || 'Peatonal',
+          tipoVisita: foundPass.type,
+          metodo: methodUsed,
+          resultado: 'Pase Usado',
+          guardiaNombre: 'Oficial Caseta de Seguridad',
+          observaciones: 'Acceso rechazado: Pase de 1 solo uso ya consumido previamente.',
+          barreraAccionada: false
+        };
+        setRegistrosAccesos(prev => [regUsado, ...prev]);
+
+        setBitacoraGuardia(prev => [{
+          id: `bit-${Date.now()}`,
+          guardiaNombre: 'Oficial Caseta de Seguridad',
+          tipo: 'Incidencia',
+          descripcion: `[Escáner] ⚠️ Acceso RECHAZADO (Pase ya Usado): ${foundPass.visitorName} -> ${foundPass.condo} [Folio: ${rawToken}]`,
+          fechaHora
+        }, ...prev]);
+
+        setIntercomLogs(prev => [
+          `[${hora}] ⚠️ Pase ya utilizado anteriormente: ${foundPass.visitorName} [Folio: ${rawToken}]`,
+          ...prev
+        ]);
         return;
       }
 
@@ -1465,12 +1619,42 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
       });
       setScannedPassDetails(foundPass);
 
-      // Add to Bitácora de Caseta
+      // Guardar en Registro de Acceso Histórico
+      const regValido: RegistroAcceso = {
+        id: `acc-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        fechaHora,
+        fecha,
+        hora,
+        token: rawToken,
+        visitanteNombre: foundPass.visitorName,
+        condoDestino: foundPass.condo,
+        residenteAnfitrion: foundPass.hostName || 'Mariana Silva (Casa 105)',
+        placas: foundPass.plate || 'Peatonal',
+        tipoVisita: foundPass.type,
+        metodo: methodUsed,
+        resultado: 'Autorizado',
+        guardiaNombre: 'Oficial Caseta de Seguridad',
+        observaciones: `Pase digital QR verificado exitosamente. Barrera vehicular autorizada para ingreso hacia ${foundPass.condo}.`,
+        barreraAccionada: true
+      };
+      setRegistrosAccesos(prev => [regValido, ...prev]);
+
+      // Guardar en Bitácora de Caseta
+      setBitacoraGuardia(prev => [{
+        id: `bit-${Date.now()}`,
+        guardiaNombre: 'Oficial Caseta de Seguridad',
+        tipo: 'Novedad',
+        descripcion: `[Escáner QR] ✓ Ingreso AUTORIZADO: ${foundPass.visitorName} -> ${foundPass.condo} (Autoriza: ${foundPass.hostName || 'Mariana Silva'} | Placas: ${foundPass.plate || 'Peatonal'} | Folio: ${rawToken})`,
+        fechaHora
+      }, ...prev]);
+
+      // Add to Bitácora rápida de Caseta
       setIntercomLogs(prev => [
-        `[${new Date().toLocaleTimeString('es-MX')}] 🛡️ Ingreso QR validado: ${foundPass.visitorName} -> ${foundPass.condo} (${foundPass.type} | Placas: ${foundPass.plate || 'Peatonal'}) [Folio: ${foundPass.token}]`,
+        `[${hora}] 🛡️ Ingreso QR validado: ${foundPass.visitorName} -> ${foundPass.condo} (${foundPass.type} | Placas: ${foundPass.plate || 'Peatonal'}) [Folio: ${foundPass.token}]`,
         ...prev
       ]);
-      showSuccessBanner(`✓ Pase validado para ${foundPass.visitorName}. Barrera vehicular lista para apertura.`);
+      showSuccessBanner(`✓ Pase validado para ${foundPass.visitorName}. Registro guardado en bitácora de caseta.`);
+      confetti({ particleCount: 30, spread: 50, origin: { y: 0.6 } });
     } else if (isResidentBadge) {
       const residentDetails = {
         id: 'resident-badge',
@@ -1481,7 +1665,8 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
         token: rawToken,
         validUntil: 'Permanente 2026',
         status: 'valido' as const,
-        createdAt: new Date().toLocaleTimeString('es-MX')
+        createdAt: new Date().toLocaleTimeString('es-MX'),
+        hostName: 'Mariana Silva (Titular)'
       };
       setScanResult({
         type: 'success',
@@ -1489,11 +1674,40 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
         details: residentDetails
       });
       setScannedPassDetails(residentDetails);
+
+      const regResidente: RegistroAcceso = {
+        id: `acc-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        fechaHora,
+        fecha,
+        hora,
+        token: rawToken,
+        visitanteNombre: 'Mariana Silva (Condómino)',
+        condoDestino: 'Casa 105',
+        residenteAnfitrion: 'Mariana Silva (Titular)',
+        placas: 'JNY-4921 (Honda CR-V)',
+        tipoVisita: 'Condómino Propietario',
+        metodo: methodUsed,
+        resultado: 'Autorizado',
+        guardiaNombre: 'Oficial Caseta de Seguridad',
+        observaciones: 'Carnet digital de residente validado. Cuotas al corriente.',
+        barreraAccionada: true
+      };
+      setRegistrosAccesos(prev => [regResidente, ...prev]);
+
+      setBitacoraGuardia(prev => [{
+        id: `bit-${Date.now()}`,
+        guardiaNombre: 'Oficial Caseta de Seguridad',
+        tipo: 'Novedad',
+        descripcion: `[Escáner Carnet] 🚗 Ingreso Residente Titular: Mariana Silva -> Casa 105 (Placas JNY-4921)`,
+        fechaHora
+      }, ...prev]);
+
       setIntercomLogs(prev => [
-        `[${new Date().toLocaleTimeString('es-MX')}] 🚗 Ingreso Residente: Mariana Silva (Casa 105 - Placas JNY-4921)`,
+        `[${hora}] 🚗 Ingreso Residente: Mariana Silva (Casa 105 - Placas JNY-4921)`,
         ...prev
       ]);
-      showSuccessBanner(`✓ Carnet residente validado. Acceso concedido.`);
+      showSuccessBanner(`✓ Carnet residente validado y asentado en bitácora.`);
+      confetti({ particleCount: 25, spread: 45, origin: { y: 0.6 } });
     } else {
       const genericDetails = {
         id: 'generic-pass',
@@ -1504,20 +1718,77 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
         token: rawToken,
         validUntil: 'Vigente hoy',
         status: 'valido' as const,
-        createdAt: new Date().toLocaleTimeString('es-MX')
+        createdAt: new Date().toLocaleTimeString('es-MX'),
+        hostName: 'Administración / Residente'
       };
       setScanResult({
         type: 'success',
-        msg: `✓ ACCESO AUTORIZADO: Folio válido "${rawToken}". Verificado en caseta a las ${new Date().toLocaleTimeString('es-MX')}.`,
+        msg: `✓ ACCESO AUTORIZADO: Folio válido "${rawToken}". Verificado en caseta a las ${hora}.`,
         details: genericDetails
       });
       setScannedPassDetails(genericDetails);
+
+      const regGenerico: RegistroAcceso = {
+        id: `acc-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        fechaHora,
+        fecha,
+        hora,
+        token: rawToken,
+        visitanteNombre: 'Visitante Registrado',
+        condoDestino: 'Condominio',
+        residenteAnfitrion: 'Residente Anfitrión',
+        placas: 'En regla',
+        tipoVisita: 'Pase Digital Verificado',
+        metodo: methodUsed,
+        resultado: 'Autorizado',
+        guardiaNombre: 'Oficial Caseta de Seguridad',
+        observaciones: `Folio "${rawToken}" verificado exitosamente en caseta.`,
+        barreraAccionada: true
+      };
+      setRegistrosAccesos(prev => [regGenerico, ...prev]);
+
+      setBitacoraGuardia(prev => [{
+        id: `bit-${Date.now()}`,
+        guardiaNombre: 'Oficial Caseta de Seguridad',
+        tipo: 'Novedad',
+        descripcion: `[Escáner] ✓ Acceso Autorizado para Folio ${rawToken}`,
+        fechaHora
+      }, ...prev]);
+
       setIntercomLogs(prev => [
-        `[${new Date().toLocaleTimeString('es-MX')}] 🛡️ Ingreso QR validado: Folio ${rawToken}`,
+        `[${hora}] 🛡️ Ingreso QR validado: Folio ${rawToken}`,
         ...prev
       ]);
-      showSuccessBanner(`✓ Folio ${rawToken} verificado con éxito.`);
+      showSuccessBanner(`✓ Folio ${rawToken} verificado y guardado en bitácora.`);
+      confetti({ particleCount: 20, spread: 40, origin: { y: 0.6 } });
     }
+  };
+
+  const handleExportarBitacoraCSV = () => {
+    const headers = ['ID', 'Fecha_Hora', 'Folio_Token', 'Visitante', 'Condo_Destino', 'Residente_Anfitrion', 'Placas', 'Tipo_Visita', 'Metodo', 'Resultado', 'Guardia', 'Observaciones'];
+    const rows = registrosAccesos.map(r => [
+      r.id,
+      `"${r.fechaHora}"`,
+      `"${r.token}"`,
+      `"${r.visitanteNombre.replace(/"/g, '""')}"`,
+      `"${r.condoDestino}"`,
+      `"${r.residenteAnfitrion.replace(/"/g, '""')}"`,
+      `"${r.placas}"`,
+      `"${r.tipoVisita}"`,
+      `"${r.metodo}"`,
+      `"${r.resultado}"`,
+      `"${r.guardiaNombre}"`,
+      `"${(r.observaciones || '').replace(/"/g, '""')}"`
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Bitacora_Accesos_Caseta_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showSuccessBanner('✓ Bitácora de accesos exportada exitosamente en formato CSV.');
   };
 
   const handleOpenBarrier = () => {
@@ -2711,16 +2982,17 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
       visitorName: visitorName.trim(),
       condo: visitorCondo.trim(),
       type: typeLabel,
-      plate: visitorPlate.trim() || 'Sin vehículo',
+      plate: visitorPlate.trim() || 'Acceso Peatonal',
       phone: visitorPhone.trim() || undefined,
       token,
       validUntil: validityLabel,
       status: 'valido' as const,
-      createdAt: new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+      createdAt: new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
+      hostName: 'Mariana Silva (Casa 105)'
     };
 
     setResidentPassesList(prev => [newPassItem, ...prev]);
-    showSuccessBanner(`✓ Código QR generado exitosamente para ${visitorName.trim()}. Listo para enviar por WhatsApp.`);
+    showSuccessBanner(`✓ Pase QR generado para ${visitorName.trim()}. Imagen con datos lista para compartir por WhatsApp.`);
   };
 
   const handleRevokePass = (id: string) => {
@@ -3286,27 +3558,15 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
 
                     <div className="space-y-1.5">
                       <button
-                        onClick={() => { setGuardiaTab('accesos'); setIsNavOpen(false); }}
+                        onClick={() => { setGuardiaTab('escaner'); setIsNavOpen(false); }}
                         className={`w-full text-left p-2.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-2.5 border ${
-                          guardiaTab === 'accesos'
+                          guardiaTab === 'escaner'
                             ? 'bg-emerald-600 text-white border-emerald-500 shadow-md'
                             : 'bg-[#1E1E22] text-slate-300 hover:bg-[#25252B] border-[#2d2d32]'
                         }`}
                       >
-                        <BadgeCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                        <span>1. Control Visitas en Vivo</span>
-                      </button>
-
-                      <button
-                        onClick={() => { setGuardiaTab('paqueteria'); setIsNavOpen(false); }}
-                        className={`w-full text-left p-2.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-2.5 border ${
-                          guardiaTab === 'paqueteria'
-                            ? 'bg-emerald-600 text-white border-emerald-500 shadow-md'
-                            : 'bg-[#1E1E22] text-slate-300 hover:bg-[#25252B] border-[#2d2d32]'
-                        }`}
-                      >
-                        <PackageCheck className="w-4 h-4 text-amber-400 shrink-0" />
-                        <span>2. Recepción Paquería</span>
+                        <QrCode className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span>1. Escáner Lector QR & Barrera</span>
                       </button>
 
                       <button
@@ -3318,7 +3578,19 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
                         }`}
                       >
                         <Clipboard className="w-4 h-4 text-blue-400 shrink-0" />
-                        <span>3. Bitácora Digital</span>
+                        <span>2. Bitácora de Accesos ({registrosAccesos.length})</span>
+                      </button>
+
+                      <button
+                        onClick={() => { setGuardiaTab('interfon_paqueteria'); setIsNavOpen(false); }}
+                        className={`w-full text-left p-2.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-2.5 border ${
+                          guardiaTab === 'interfon_paqueteria'
+                            ? 'bg-emerald-600 text-white border-emerald-500 shadow-md'
+                            : 'bg-[#1E1E22] text-slate-300 hover:bg-[#25252B] border-[#2d2d32]'
+                        }`}
+                      >
+                        <PackageCheck className="w-4 h-4 text-amber-400 shrink-0" />
+                        <span>3. Interfón & Paquetería</span>
                       </button>
                     </div>
                   </div>
@@ -6907,30 +7179,19 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
 
                       {/* Display Generated QR Card */}
                       {generatedInviteQR && (() => {
-                        const cleanPhone = visitorPhone.replace(/[^0-9]/g, '');
-                        const formattedPhone = cleanPhone.length === 10 ? `52${cleanPhone}` : cleanPhone;
-                        const passLink = `${window.location.origin}${window.location.pathname}?pass=${encodeURIComponent(generatedInviteQR)}`;
-                        
-                        const waMsg = `🎫 *PASE DE ACCESO DIGITAL - CONDOMINIO*\n` +
-                          `━━━━━━━━━━━━━━━━━━━━━\n` +
-                          `👋 ¡Hola *${visitorName}*!\n` +
-                          `Te comparto tu pase oficial de ingreso autorizado:\n\n` +
-                          `🏠 *Destino:* ${visitorCondo}\n` +
-                          `🚘 *Vehículo / Placas:* ${visitorPlate || 'Peatonal'}\n` +
-                          `📋 *Tipo:* ${visitorAccessType === 'visita' ? 'Visita Familiar' : visitorAccessType === 'delivery' ? 'Delivery' : 'Proveedor'}\n` +
-                          `⏱️ *Vigencia:* ${visitorValidity === '1_uso' ? '1 solo acceso' : visitorValidity === '24_horas' ? '24 Horas' : '3 Días'}\n\n` +
-                          `📲 *Tu Código QR de Acceso:* ${generatedInviteQR}\n` +
-                          `Abre este enlace y muéstralo al guardia en la caseta para abrir la pluma:\n` +
-                          `🔗 ${passLink}\n` +
-                          `━━━━━━━━━━━━━━━━━━━━━\n` +
-                          `_Residencial Bosques • Control de Accesos._`;
-
-                        const waDirectUrl = formattedPhone 
-                          ? `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(waMsg)}`
-                          : `https://api.whatsapp.com/send?text=${encodeURIComponent(waMsg)}`;
-
-                        const waSelfMsg = `📌 *RESPALDO DE MI PASE GENERADO*\n• Visitante: ${visitorName}\n• Casa: ${visitorCondo}\n• Auto: ${visitorPlate || 'Peatonal'}\n• Folio QR: ${generatedInviteQR}\n• Enlace: ${passLink}`;
-                        const waSelfUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(waSelfMsg)}`;
+                        const passDataForImage: VisitorPassData = {
+                          id: 'current-gen-pass',
+                          visitorName: visitorName.trim(),
+                          condo: visitorCondo.trim(),
+                          type: visitorAccessType === 'visita' ? 'Visita Social / Familiar' : visitorAccessType === 'delivery' ? 'Paquetería & Delivery' : visitorAccessType === 'proveedor' ? 'Técnico / Servicio' : 'Mudanza / Contratista',
+                          plate: visitorPlate.trim() || 'Acceso Peatonal',
+                          phone: visitorPhone.trim(),
+                          token: generatedInviteQR,
+                          validUntil: visitorValidity === '1_uso' ? '1 solo acceso' : visitorValidity === '24_horas' ? '24 Horas' : visitorValidity === '3_dias' ? '3 Días' : '7 Días',
+                          status: 'valido',
+                          createdAt: new Date().toLocaleTimeString('es-MX'),
+                          hostName: 'Mariana Silva (Casa 105)'
+                        };
 
                         return (
                           <div className="p-4 bg-slate-950 border border-emerald-500/40 rounded-2xl space-y-3 animate-fade-in text-center">
@@ -6949,83 +7210,75 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
                             <div className="space-y-0.5 text-left bg-[#141417] p-2.5 rounded-xl border border-slate-800 text-[11px]">
                               <p className="text-slate-400 font-mono text-[9px]">FOLIO / TOKEN: <strong className="text-emerald-400 font-mono">{generatedInviteQR}</strong></p>
                               <p className="text-white font-bold">Visitante: {visitorName}</p>
-                              <p className="text-slate-300">Destino: {visitorCondo} {visitorPlate ? `| Auto: ${visitorPlate}` : ''}</p>
+                              <p className="text-slate-300">Destino: {visitorCondo} {visitorPlate ? `| Auto: ${visitorPlate}` : '| Peatonal'}</p>
+                              <p className="text-sky-300 font-sans text-[10px]">Autoriza (Residente): Mariana Silva (Casa 105)</p>
                               {visitorPhone && (
                                 <p className="text-emerald-300 font-mono text-[10px]">WhatsApp: +52 {visitorPhone}</p>
                               )}
                             </div>
 
-                            {/* WhatsApp Direct Share Action */}
+                            <div className="p-2 bg-emerald-950/20 border border-emerald-500/20 rounded-xl text-[10px] text-slate-300 text-left leading-relaxed">
+                              🛡️ <strong className="text-emerald-300">Pase seguro como Imagen:</strong> Se comparte directamente la imagen con el código QR y datos básicos. El visitante no requiere registrarse ni tener enlaces de acceso al sistema.
+                            </div>
+
+                            {/* Actions: Image sharing, download, and copy */}
                             <div className="space-y-2">
-                              <a
-                                href={waDirectUrl}
-                                target="_blank"
-                                referrerPolicy="no-referrer"
-                                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50"
+                              <button
+                                type="button"
+                                onClick={() => sharePassImageOrFallback(passDataForImage)}
+                                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-98 text-white font-black text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50"
                               >
                                 <Send className="w-4 h-4" />
-                                <span>{visitorPhone ? `Enviar a WhatsApp de ${visitorName}` : 'Compartir Pase por WhatsApp'}</span>
-                              </a>
+                                <span>{visitorPhone ? `Compartir Imagen a WhatsApp (+52 ${visitorPhone})` : 'Compartir Imagen del Pase por WhatsApp'}</span>
+                              </button>
 
                               <div className="grid grid-cols-2 gap-2">
-                                <a
-                                  href={waSelfUrl}
-                                  target="_blank"
-                                  referrerPolicy="no-referrer"
-                                  className="py-1.5 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
+                                <button
+                                  type="button"
+                                  onClick={() => downloadPassImage(passDataForImage)}
+                                  className="py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 text-[10px] font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
                                 >
-                                  <Home className="w-3 h-3" />
-                                  <span>Mi WhatsApp</span>
-                                </a>
+                                  <Download className="w-3 h-3 text-sky-400" />
+                                  <span>Descargar PNG</span>
+                                </button>
 
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    setSelectedPassModal({
-                                      id: 'preview-pass',
-                                      visitorName: visitorName,
-                                      condo: visitorCondo,
-                                      type: visitorAccessType === 'visita' ? 'Visita Familiar' : 'Servicio',
-                                      plate: visitorPlate,
-                                      phone: visitorPhone,
-                                      token: generatedInviteQR,
-                                      validUntil: visitorValidity,
-                                      status: 'valido',
-                                      createdAt: new Date().toLocaleTimeString('es-MX')
-                                    });
+                                  onClick={async () => {
+                                    const success = await copyPassImageToClipboard(passDataForImage);
+                                    if (success) {
+                                      showSuccessBanner('✓ Imagen del pase copiada al portapapeles.');
+                                    } else {
+                                      await downloadPassImage(passDataForImage);
+                                    }
                                   }}
-                                  className="py-1.5 bg-blue-950/40 hover:bg-blue-900/60 border border-blue-500/30 text-blue-300 text-[10px] font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
+                                  className="py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 text-[10px] font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
                                 >
-                                  <Smartphone className="w-3 h-3" />
-                                  <span>Ver Pase Celular</span>
+                                  <Copy className="w-3 h-3 text-amber-400" />
+                                  <span>Copiar Imagen</span>
                                 </button>
                               </div>
 
-                              <div className="flex gap-2">
+                              <div className="grid grid-cols-2 gap-2">
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    if (navigator.clipboard) {
-                                      navigator.clipboard.writeText(generatedInviteQR);
-                                      setQrTokenCopied(true);
-                                      setTimeout(() => setQrTokenCopied(false), 2000);
-                                    }
-                                  }}
-                                  className="flex-1 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 text-[10px] font-bold rounded-lg border border-slate-800 transition flex items-center justify-center gap-1"
+                                  onClick={() => setSelectedPassModal(passDataForImage)}
+                                  className="py-1.5 bg-blue-950/40 hover:bg-blue-900/60 border border-blue-500/30 text-blue-300 text-[10px] font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
                                 >
-                                  <Copy className="w-3 h-3 text-slate-400" />
-                                  <span>{qrTokenCopied ? '¡Copiado!' : 'Copiar Token'}</span>
+                                  <Smartphone className="w-3 h-3" />
+                                  <span>Ver Tarjeta Pase</span>
                                 </button>
 
                                 <button
                                   type="button"
                                   onClick={() => {
                                     setActiveSubSection('guardia');
+                                    setGuardiaTab('escaner');
                                     setTimeout(() => {
-                                      validateQrToken(generatedInviteQR);
+                                      validateQrToken(generatedInviteQR, 'Simulación Caseta');
                                     }, 200);
                                   }}
-                                  className="flex-1 py-1.5 bg-slate-900 hover:bg-slate-800 text-amber-300 text-[10px] font-bold rounded-lg border border-slate-800 transition flex items-center justify-center gap-1 cursor-pointer"
+                                  className="py-1.5 bg-slate-900 hover:bg-slate-800 text-amber-300 text-[10px] font-bold rounded-xl border border-slate-800 transition flex items-center justify-center gap-1 cursor-pointer"
                                 >
                                   <BadgeCheck className="w-3 h-3 text-amber-400" />
                                   <span>Probar en Caseta</span>
@@ -7153,27 +7406,27 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
 
                               {pass.status === 'valido' && (
                                 <>
-                                  {(() => {
-                                    const cleanP = (pass.phone || '').replace(/[^0-9]/g, '');
-                                    const formattedP = cleanP.length === 10 ? `52${cleanP}` : cleanP;
-                                    const waMsgItem = `🎫 *PASE DIGITAL VIGENTE - CONDOMINIO*\n` +
-                                      `Hola ${pass.visitorName}, te compartimos tu pase para ingresar a ${pass.condo}.\n\n` +
-                                      `📲 Folio: ${pass.token}\n` +
-                                      `🔗 Abre tu pase aquí: ${window.location.origin}${window.location.pathname}?pass=${encodeURIComponent(pass.token)}`;
-                                    const itemWaUrl = formattedP
-                                      ? `https://api.whatsapp.com/send?phone=${formattedP}&text=${encodeURIComponent(waMsgItem)}`
-                                      : `https://api.whatsapp.com/send?text=${encodeURIComponent(waMsgItem)}`;
-                                    return (
-                                      <a
-                                        href={itemWaUrl}
-                                        target="_blank"
-                                        referrerPolicy="no-referrer"
-                                        className="text-[9.5px] text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 cursor-pointer"
-                                      >
-                                        <Send className="w-3 h-3" /> WhatsApp
-                                      </a>
-                                    );
-                                  })()}
+                                  <button
+                                    type="button"
+                                    onClick={() => sharePassImageOrFallback({
+                                      ...pass,
+                                      hostName: pass.hostName || 'Mariana Silva (Casa 105)'
+                                    })}
+                                    className="text-[9.5px] text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Send className="w-3 h-3" /> WhatsApp Imagen
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => downloadPassImage({
+                                      ...pass,
+                                      hostName: pass.hostName || 'Mariana Silva (Casa 105)'
+                                    })}
+                                    className="text-[9.5px] text-sky-400 hover:text-sky-300 font-bold flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Download className="w-3 h-3" /> Descargar
+                                  </button>
 
                                   <button
                                     type="button"
@@ -7536,259 +7789,751 @@ SELECT ''✓ Base de datos de Supabase limpia y lista para producción (Datos de
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Sub-tabs Navigation for Guardia */}
+              <div className="flex flex-wrap gap-2 border-b border-[#2d2d32] pb-3">
+                <button
+                  type="button"
+                  onClick={() => setGuardiaTab('escaner')}
+                  className={`px-3.5 py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
+                    guardiaTab === 'escaner'
+                      ? 'bg-emerald-600 text-white shadow-lg'
+                      : 'bg-[#1E1E22] text-slate-400 hover:text-white border border-[#2d2d32]'
+                  }`}
+                >
+                  <QrCode className="w-3.5 h-3.5" />
+                  <span>1. Escáner Lector QR & Barrera</span>
+                </button>
 
-                {/* MODULE 1: ESCÁNER QR EN CASETA */}
-                <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-2xl p-5 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-widest font-mono">Control de Caseta</span>
-                      <h3 className="text-base font-black text-white mt-0.5">Escáner Lector QR Visitas</h3>
-                      <p className="text-xs text-slate-400">Valida en tiempo real los pases QR de residentes y visitas.</p>
+                <button
+                  type="button"
+                  onClick={() => setGuardiaTab('bitacora')}
+                  className={`px-3.5 py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
+                    guardiaTab === 'bitacora'
+                      ? 'bg-emerald-600 text-white shadow-lg'
+                      : 'bg-[#1E1E22] text-slate-400 hover:text-white border border-[#2d2d32]'
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>2. Bitácora & Registros de Acceso ({registrosAccesos.length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setGuardiaTab('interfon_paqueteria')}
+                  className={`px-3.5 py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
+                    guardiaTab === 'interfon_paqueteria'
+                      ? 'bg-emerald-600 text-white shadow-lg'
+                      : 'bg-[#1E1E22] text-slate-400 hover:text-white border border-[#2d2d32]'
+                  }`}
+                >
+                  <Package className="w-3.5 h-3.5" />
+                  <span>3. Interfón, Paquetería & Novedades</span>
+                </button>
+              </div>
+
+              {/* TAB 1: ESCÁNER QR & BARRERA VEHICULAR */}
+              {guardiaTab === 'escaner' && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
+
+                  {/* MODULE 1: ESCÁNER QR EN CASETA */}
+                  <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-2xl p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-widest font-mono">Control de Caseta</span>
+                        <h3 className="text-base font-black text-white mt-0.5">Escáner Lector QR Visitas</h3>
+                        <p className="text-xs text-slate-400">Valida en tiempo real los pases QR de residentes y visitas.</p>
+                      </div>
+                      <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[9px] font-mono font-bold">
+                        Cámara Activa
+                      </span>
                     </div>
-                    <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[9px] font-mono font-bold">
-                      Cámara Activa
-                    </span>
-                  </div>
 
-                  {/* Primary Action: Launch Mobile / Webcam Scanner */}
-                  <div className="space-y-3">
-                    <button
-                      type="button"
-                      onClick={() => setIsCameraScannerOpen(true)}
-                      className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-98 text-white font-black text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-2.5 shadow-xl shadow-emerald-950/60 border border-emerald-400/40"
-                    >
-                      <Camera className="w-5 h-5 text-emerald-200 animate-pulse" />
-                      <span>📷 Abrir Cámara y Escanear Pase QR</span>
-                    </button>
-
-                    {/* Quick simulation buttons for fast testing without camera */}
-                    <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2 text-left">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Pases listos para prueba:
-                        </span>
-                        <span className="text-[9px] text-slate-500 font-mono">1 clic para validar</span>
-                      </div>
-                      <div className="flex flex-col gap-1.5">
-                        {residentPassesList.slice(0, 2).map((p) => (
-                          <button
-                            key={p.id}
-                            type="button"
-                            onClick={() => validateQrToken(p.token)}
-                            className="w-full p-2 bg-slate-900 hover:bg-emerald-950/40 text-slate-300 hover:text-emerald-300 text-[10px] font-bold rounded-lg border border-slate-800 hover:border-emerald-500/30 transition text-left flex items-center justify-between cursor-pointer"
-                          >
-                            <span className="truncate max-w-[170px]">{p.visitorName} ({p.condo})</span>
-                            <span className="text-[8.5px] font-mono text-emerald-400 shrink-0">Simular Escaneo →</span>
-                          </button>
-                        ))}
-                        <button
-                          type="button"
-                          onClick={() => validateQrToken('CNLS-RESIDENT-MARIANA-SILVA-CASA105-V2026')}
-                          className="w-full p-2 bg-slate-900 hover:bg-blue-950/40 text-slate-300 hover:text-blue-300 text-[10px] font-bold rounded-lg border border-slate-800 hover:border-blue-500/30 transition text-left flex items-center justify-between cursor-pointer"
-                        >
-                          <span className="truncate max-w-[170px]">Mariana Silva (Carnet Residente)</span>
-                          <span className="text-[8.5px] font-mono text-blue-400 shrink-0">Carnet QR →</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Manual token input */}
-                    <div className="space-y-2">
-                      <div className="relative">
-                        <input
-                          type="text"
-                          value={scannerInput}
-                          onChange={(e) => setScannerInput(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && simulateQrScan()}
-                          placeholder="O pega / teclea el folio QR (ej: CNLS-PASS-C105-9921)"
-                          className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs font-mono text-center uppercase placeholder-slate-600 focus:border-emerald-500 focus:outline-hidden"
-                        />
-                      </div>
+                    {/* Primary Action: Launch Mobile / Webcam Scanner */}
+                    <div className="space-y-3">
                       <button
                         type="button"
-                        onClick={simulateQrScan}
-                        className="w-full py-2 bg-slate-900 hover:bg-slate-850 text-slate-200 font-bold text-xs rounded-xl border border-slate-800 transition cursor-pointer flex items-center justify-center gap-1.5"
+                        onClick={() => setIsCameraScannerOpen(true)}
+                        className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-98 text-white font-black text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-2.5 shadow-xl shadow-emerald-950/60 border border-emerald-400/40"
                       >
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Validar Folio Manual
+                        <Camera className="w-5 h-5 text-emerald-200 animate-pulse" />
+                        <span>📷 Abrir Cámara y Escanear Pase QR</span>
                       </button>
-                    </div>
 
-                    {/* Scan Result Feedback Card */}
-                    {scanResult && (
-                      <div className={`p-3.5 rounded-2xl border text-xs space-y-2 font-sans text-left transition animate-fade-in ${
-                        scanResult.type === 'success'
-                          ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-200'
-                          : 'bg-rose-950/40 border-rose-500/50 text-rose-200'
-                      }`}>
-                        <div className="flex items-center gap-2 font-bold text-xs">
-                          {scanResult.type === 'success' ? (
-                            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                          ) : (
-                            <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
-                          )}
-                          <span>{scanResult.msg}</span>
+                      {/* Quick simulation buttons for fast testing without camera */}
+                      <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2 text-left">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Pases listos para prueba:
+                          </span>
+                          <span className="text-[9px] text-slate-500 font-mono">1 clic para validar</span>
                         </div>
-
-                        {scannedPassDetails && (
-                          <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800 text-[11px] text-slate-300 space-y-1">
-                            <p><strong className="text-white">Visitante:</strong> {scannedPassDetails.visitorName}</p>
-                            <p><strong className="text-white">Destino:</strong> {scannedPassDetails.condo}</p>
-                            <p><strong className="text-white">Vehículo / Placas:</strong> {scannedPassDetails.plate || 'Peatonal'}</p>
-                            <p className="text-slate-400 font-mono text-[9px]">Folio: {scannedPassDetails.token}</p>
-                          </div>
-                        )}
-
-                        {/* Vehicular Barrier Controls */}
-                        {scanResult.type === 'success' && (
-                          <div className="pt-2 border-t border-emerald-500/20 space-y-2">
-                            <div className="flex items-center justify-between text-[10px] font-mono">
-                              <span className="text-slate-300">Barrera Vehicular:</span>
-                              <span className={`px-2 py-0.5 rounded font-bold uppercase ${
-                                barrierStatus === 'open' ? 'bg-emerald-500 text-white animate-pulse' :
-                                barrierStatus === 'opening' || barrierStatus === 'closing' ? 'bg-amber-500 text-white' :
-                                'bg-slate-800 text-slate-300'
-                              }`}>
-                                {barrierStatus === 'open' ? '🟢 PLUMA ABIERTA' :
-                                 barrierStatus === 'opening' ? '🟡 ELEVANDO...' :
-                                 barrierStatus === 'closing' ? '🟡 BAJANDO...' :
-                                 '🚧 PLUMA CERRADA'}
-                              </span>
-                            </div>
-
+                        <div className="flex flex-col gap-1.5">
+                          {residentPassesList.slice(0, 3).map((p) => (
                             <button
+                              key={p.id}
                               type="button"
-                              onClick={handleOpenBarrier}
-                              disabled={barrierStatus !== 'closed'}
-                              className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 text-white font-black text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-emerald-950/40"
+                              onClick={() => validateQrToken(p.token, 'Simulación Caseta')}
+                              className="w-full p-2 bg-slate-900 hover:bg-emerald-950/40 text-slate-300 hover:text-emerald-300 text-[10px] font-bold rounded-lg border border-slate-800 hover:border-emerald-500/30 transition text-left flex items-center justify-between cursor-pointer"
                             >
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>{barrierStatus === 'closed' ? 'Abrir Pluma de Caseta' : 'Accionando Barrera...'}</span>
+                              <div className="truncate max-w-[170px]">
+                                <span className="block truncate font-bold text-white">{p.visitorName}</span>
+                                <span className="text-[9px] text-slate-400 font-mono">{p.condo} • {p.plate || 'Peatonal'}</span>
+                              </div>
+                              <span className="text-[8.5px] font-mono text-emerald-400 shrink-0">Simular Escaneo →</span>
                             </button>
-                          </div>
-                        )}
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => validateQrToken('CNLS-RESIDENT-MARIANA-SILVA-CASA105-V2026', 'Simulación Caseta')}
+                            className="w-full p-2 bg-slate-900 hover:bg-blue-950/40 text-slate-300 hover:text-blue-300 text-[10px] font-bold rounded-lg border border-slate-800 hover:border-blue-500/30 transition text-left flex items-center justify-between cursor-pointer"
+                          >
+                            <div>
+                              <span className="block truncate font-bold text-sky-300">Mariana Silva (Carnet Residente)</span>
+                              <span className="text-[9px] text-slate-400 font-mono">Casa 105 • Cuotas al día</span>
+                            </div>
+                            <span className="text-[8.5px] font-mono text-blue-400 shrink-0">Carnet QR →</span>
+                          </button>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                </div>
 
-                {/* MODULE 2: INTERFÓN DIGITAL */}
-                <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-2xl p-5 space-y-4">
-                  <div>
-                    <span className="text-[9px] font-bold text-sky-400 uppercase tracking-widest font-mono">Comunicación Directa</span>
-                    <h3 className="text-base font-black text-white mt-1">Interfón Digital de Caseta</h3>
-                    <p className="text-xs text-slate-400 mt-0.5">Llamada de voz a departamento sin cables.</p>
-                  </div>
-
-                  <div className="space-y-3 font-sans text-xs">
-                    <div>
-                      <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Buscar Departamento / Torre</label>
-                      <input
-                        type="text"
-                        value={intercomTarget}
-                        onChange={(e) => setIntercomTarget(e.target.value)}
-                        placeholder="Ej. Torre A - Depto 402"
-                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono text-xs"
-                      />
-                    </div>
-
-                    <div className="flex gap-2">
-                      <button
-                        onClick={triggerIntercomCall}
-                        disabled={intercomState === 'calling' || intercomState === 'connected'}
-                        className="flex-1 py-2.5 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5"
-                      >
-                        <PhoneCall className="w-4 h-4" /> Timbrar
-                      </button>
-                      {intercomState !== 'idle' && (
+                      {/* Manual token input */}
+                      <div className="space-y-2">
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={scannerInput}
+                            onChange={(e) => setScannerInput(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && validateQrToken(scannerInput, 'Folio Manual')}
+                            placeholder="O pega / teclea el folio QR (ej: CNLS-PASS-C105-9921)"
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs font-mono text-center uppercase placeholder-slate-600 focus:border-emerald-500 focus:outline-hidden"
+                          />
+                        </div>
                         <button
-                          onClick={endIntercomCall}
-                          className="px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl transition cursor-pointer"
+                          type="button"
+                          onClick={() => validateQrToken(scannerInput, 'Folio Manual')}
+                          className="w-full py-2 bg-slate-900 hover:bg-slate-850 text-slate-200 font-bold text-xs rounded-xl border border-slate-800 transition cursor-pointer flex items-center justify-center gap-1.5"
                         >
-                          Colgar 📞
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Validar Folio Manual
                         </button>
+                      </div>
+
+                      {/* Scan Result Feedback Card */}
+                      {scanResult && (
+                        <div className={`p-3.5 rounded-2xl border text-xs space-y-2 font-sans text-left transition animate-fade-in ${
+                          scanResult.type === 'success'
+                            ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-200'
+                            : 'bg-rose-950/40 border-rose-500/50 text-rose-200'
+                        }`}>
+                          <div className="flex items-center gap-2 font-bold text-xs">
+                            {scanResult.type === 'success' ? (
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                            ) : (
+                              <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
+                            )}
+                            <span>{scanResult.msg}</span>
+                          </div>
+
+                          {scannedPassDetails && (
+                            <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800 text-[11px] text-slate-300 space-y-1">
+                              <p><strong className="text-white">Visitante:</strong> {scannedPassDetails.visitorName}</p>
+                              <p><strong className="text-white">Destino:</strong> {scannedPassDetails.condo}</p>
+                              <p><strong className="text-white">Vehículo / Placas:</strong> {scannedPassDetails.plate || 'Peatonal'}</p>
+                              <p className="text-slate-400 font-mono text-[9px]">Folio: {scannedPassDetails.token}</p>
+                              <p className="text-emerald-400 font-mono text-[9px] pt-0.5">✓ Guardado en bitácora de caseta</p>
+                            </div>
+                          )}
+
+                          {/* Vehicular Barrier Controls */}
+                          {scanResult.type === 'success' && (
+                            <div className="pt-2 border-t border-emerald-500/20 space-y-2">
+                              <div className="flex items-center justify-between text-[10px] font-mono">
+                                <span className="text-slate-300">Barrera Vehicular:</span>
+                                <span className={`px-2 py-0.5 rounded font-bold uppercase ${
+                                  barrierStatus === 'open' ? 'bg-emerald-500 text-white animate-pulse' :
+                                  barrierStatus === 'opening' || barrierStatus === 'closing' ? 'bg-amber-500 text-white' :
+                                  'bg-slate-800 text-slate-300'
+                                }`}>
+                                  {barrierStatus === 'open' ? '🟢 PLUMA ABIERTA' :
+                                   barrierStatus === 'opening' ? '🟡 ELEVANDO...' :
+                                   barrierStatus === 'closing' ? '🟡 BAJANDO...' :
+                                   '🚧 PLUMA CERRADA'}
+                                </span>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={handleOpenBarrier}
+                                disabled={barrierStatus !== 'closed'}
+                                className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 text-white font-black text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-emerald-950/40"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>{barrierStatus === 'closed' ? 'Abrir Pluma de Caseta' : 'Accionando Barrera...'}</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
+                  </div>
 
-                    <div className="bg-slate-950 border border-slate-900 rounded-xl p-3 font-mono text-[9.5px] max-h-36 overflow-y-auto space-y-1">
-                      <span className="text-slate-500 font-bold block border-b border-slate-850 pb-1">Bitácora de Interfón</span>
-                      {intercomLogs.map((log, i) => (
-                        <div key={i} className="text-slate-300">{log}</div>
+                  {/* MODULE 2: PASES REGISTRADOS POR RESIDENTES */}
+                  <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-2xl p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-[9px] font-bold text-blue-400 uppercase tracking-widest font-mono">Pases Emitidos</span>
+                        <h3 className="text-base font-black text-white mt-0.5">Visitas Autorizadas</h3>
+                        <p className="text-xs text-slate-400">Pases generados por residentes listos para validación.</p>
+                      </div>
+                      <span className="px-2 py-0.5 bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded text-[9px] font-mono font-bold">
+                        {residentPassesList.filter(p => p.status === 'valido').length} Activos
+                      </span>
+                    </div>
+
+                    <div className="space-y-2.5 max-h-[440px] overflow-y-auto pr-1">
+                      {residentPassesList.map(pass => (
+                        <div
+                          key={pass.id}
+                          className={`p-3 rounded-xl border text-left space-y-2 transition ${
+                            pass.status === 'valido'
+                              ? 'bg-[#141417] border-[#2c2c34] hover:border-emerald-500/40'
+                              : 'bg-slate-950/60 border-slate-850 opacity-75'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black text-white truncate max-w-[160px]">
+                              {pass.visitorName}
+                            </span>
+                            <span className={`text-[8px] font-bold uppercase font-mono px-2 py-0.5 rounded ${
+                              pass.status === 'valido'
+                                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                                : 'bg-slate-800 text-slate-400'
+                            }`}>
+                              {pass.status === 'valido' ? '✓ Vigente' : pass.status === 'usado' ? 'Consumido' : 'Revocado'}
+                            </span>
+                          </div>
+
+                          <div className="text-[10px] text-slate-400 space-y-0.5 font-sans">
+                            <p>Destino: <strong className="text-slate-200">{pass.condo}</strong> | Auto: {pass.plate || 'Peatonal'}</p>
+                            <p className="text-[9px] text-sky-400 font-mono">Autoriza: {pass.hostName || 'Mariana Silva (Casa 105)'}</p>
+                            <p className="font-mono text-[8.5px] text-slate-500">Folio: {pass.token}</p>
+                          </div>
+
+                          {pass.status === 'valido' && (
+                            <div className="pt-1.5 border-t border-[#232328] flex items-center justify-between gap-2">
+                              <button
+                                type="button"
+                                onClick={() => validateQrToken(pass.token, 'Simulación Caseta')}
+                                className="w-full py-1 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 text-[10px] font-bold rounded-lg transition text-center cursor-pointer"
+                              >
+                                Validar Ingreso en Caseta →
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       ))}
                     </div>
                   </div>
-                </div>
 
-                {/* MODULE 3: CONTROL DE PAQUETERÍA */}
-                <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-2xl p-5 space-y-4">
-                  <div>
-                    <span className="text-[9px] font-bold text-purple-400 uppercase tracking-widest font-mono">Recepcion de Envíos</span>
-                    <h3 className="text-base font-black text-white mt-1">Control de Paquetería</h3>
-                    <p className="text-xs text-slate-400 mt-0.5">Registra la recepción de paquetes de Amazon, Mercado Libre, etc.</p>
+                  {/* MODULE 3: VISTA RÁPIDA DE ÚLTIMOS ACCESOS REGISTRADOS */}
+                  <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-2xl p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-[9px] font-bold text-amber-400 uppercase tracking-widest font-mono">Auditoría en Tiempo Real</span>
+                        <h3 className="text-base font-black text-white mt-0.5">Últimos Accesos Caseta</h3>
+                        <p className="text-xs text-slate-400">Escaneos recientes guardados en el sistema.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setGuardiaTab('bitacora')}
+                        className="text-[9px] font-bold text-emerald-400 hover:text-emerald-300 font-mono underline cursor-pointer"
+                      >
+                        Ver Bitácora Completa →
+                      </button>
+                    </div>
+
+                    <div className="space-y-2 max-h-[360px] overflow-y-auto">
+                      {registrosAccesos.slice(0, 5).map(reg => (
+                        <div key={reg.id} className="p-2.5 bg-slate-950 border border-slate-800 rounded-xl space-y-1 text-left text-xs font-sans">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-white text-[11px] truncate max-w-[160px]">{reg.visitanteNombre}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase font-mono ${
+                              reg.resultado === 'Autorizado'
+                                ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                                : 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+                            }`}>
+                              {reg.resultado}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 flex items-center justify-between">
+                            <span>{reg.condoDestino} • Placas: {reg.placas}</span>
+                            <span className="font-mono text-[9px] text-slate-500">{reg.hora}</span>
+                          </div>
+                          <p className="text-[9px] text-sky-400 font-mono truncate">Anfitrión: {reg.residenteAnfitrion}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="pt-2 border-t border-[#2d2d32]">
+                      <button
+                        type="button"
+                        onClick={handleExportarBitacoraCSV}
+                        className="w-full py-2 bg-slate-900 hover:bg-slate-850 text-slate-200 border border-slate-700 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Download className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Exportar Bitácora a CSV</span>
+                      </button>
+                    </div>
                   </div>
 
-                  <form onSubmit={handleRegisterParcel} className="space-y-3 font-sans text-xs">
-                    <div>
-                      <input
-                        type="text"
-                        required
-                        value={parcelResident}
-                        onChange={(e) => setParcelResident(e.target.value)}
-                        placeholder="Residente / Depto (ej: Clicerio / A-402)"
-                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs"
-                      />
-                    </div>
+                </div>
+              )}
 
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type="text"
-                        required
-                        value={parcelCarrier}
-                        onChange={(e) => setParcelCarrier(e.target.value)}
-                        placeholder="Paquetera (Amazon/DHL)"
-                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs"
-                      />
-                      <input
-                        type="text"
-                        required
-                        value={parcelTracking}
-                        onChange={(e) => setParcelTracking(e.target.value)}
-                        placeholder="# Guía o Tracking"
-                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs font-mono"
-                      />
-                    </div>
-
-                    <button
-                      type="submit"
-                      className="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5"
-                    >
-                      <Package className="w-4 h-4" /> Registrar e Notificar
-                    </button>
-                  </form>
-
-                  <div className="max-h-40 overflow-y-auto space-y-2 pt-1">
-                    {parcels.map(p => (
-                      <div key={p.id} className="p-2.5 bg-slate-950 border border-slate-900 rounded-xl flex items-center justify-between text-[10px]">
-                        <div>
-                          <p className="font-bold text-white">{p.carrier} - {p.residentName}</p>
-                          <p className="text-slate-500 font-mono text-[9px]">Guía: {p.trackingNumber}</p>
+              {/* TAB 2: BITÁCORA Y REGISTROS HISTÓRICOS DE ACCESO EN CASETA */}
+              {guardiaTab === 'bitacora' && (
+                <div className="space-y-6 animate-fade-in text-left">
+                  
+                  {/* Header & Metrics */}
+                  <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-3xl p-6 shadow-xl space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#2d2d32] pb-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono text-[9px] font-black uppercase">
+                            Auditoría de Seguridad Oficial
+                          </span>
+                          <span className="text-[9px] font-mono text-slate-400">Almacenamiento Persistente</span>
                         </div>
-                        {p.status === 'en_recepcion' ? (
+                        <h3 className="text-xl font-black text-white mt-1">Bitácora & Registros Históricos de Acceso en Caseta</h3>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Consulta todos los ingresos validados mediante escaneo de código QR o folio. Datos protegidos para futuras aclaraciones o inspección administrativa.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleExportarBitacoraCSV}
+                          className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-md shadow-emerald-950/40"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Descargar CSV</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => window.print()}
+                          className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 font-bold text-xs rounded-xl transition cursor-pointer flex items-center gap-1.5"
+                        >
+                          <Printer className="w-3.5 h-3.5 text-slate-400" />
+                          <span>Imprimir</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Metric Cards */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      <div className="bg-[#141417] p-3.5 rounded-2xl border border-slate-800">
+                        <span className="text-[9px] uppercase tracking-wider font-mono text-slate-400 font-bold block">Total Registros</span>
+                        <p className="text-2xl font-black text-white mt-0.5">{registrosAccesos.length}</p>
+                        <span className="text-[9px] text-slate-500">En base de datos</span>
+                      </div>
+
+                      <div className="bg-[#141417] p-3.5 rounded-2xl border border-slate-800">
+                        <span className="text-[9px] uppercase tracking-wider font-mono text-slate-400 font-bold block">Accesos Autorizados</span>
+                        <p className="text-2xl font-black text-emerald-400 mt-0.5">
+                          {registrosAccesos.filter(r => r.resultado === 'Autorizado').length}
+                        </p>
+                        <span className="text-[9px] text-emerald-500/80">Pluma vehicular abierta</span>
+                      </div>
+
+                      <div className="bg-[#141417] p-3.5 rounded-2xl border border-slate-800">
+                        <span className="text-[9px] uppercase tracking-wider font-mono text-slate-400 font-bold block">Rechazados / Revocados</span>
+                        <p className="text-2xl font-black text-rose-400 mt-0.5">
+                          {registrosAccesos.filter(r => r.resultado !== 'Autorizado').length}
+                        </p>
+                        <span className="text-[9px] text-rose-500/80">Acceso denegado</span>
+                      </div>
+
+                      <div className="bg-[#141417] p-3.5 rounded-2xl border border-slate-800">
+                        <span className="text-[9px] uppercase tracking-wider font-mono text-slate-400 font-bold block">Vehiculares</span>
+                        <p className="text-2xl font-black text-amber-400 mt-0.5">
+                          {registrosAccesos.filter(r => r.placas && r.placas.toLowerCase() !== 'peatonal' && r.placas.toLowerCase() !== 'sin vehículo').length}
+                        </p>
+                        <span className="text-[9px] text-amber-500/80">Con matrícula vehicular</span>
+                      </div>
+                    </div>
+
+                    {/* Filter and Search Bar */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 pt-2">
+                      <div className="md:col-span-2 relative">
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          placeholder="Buscar por visitante, residente anfitrión, placas, destino o folio..."
+                          value={filterAccesoQuery}
+                          onChange={(e) => setFilterAccesoQuery(e.target.value)}
+                          className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs placeholder-slate-600 focus:border-emerald-500 focus:outline-hidden"
+                        />
+                      </div>
+
+                      <div>
+                        <select
+                          value={filterAccesoResultado}
+                          onChange={(e) => setFilterAccesoResultado(e.target.value as any)}
+                          className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs focus:border-emerald-500 focus:outline-hidden"
+                        >
+                          <option value="todos">Todos los Resultados</option>
+                          <option value="Autorizado">Solo Autorizados ✓</option>
+                          <option value="Denegado">Solo Denegados ⛔</option>
+                          <option value="Revocado">Solo Revocados ✕</option>
+                          <option value="Pase Usado">Solo Pases Usados ⚠️</option>
+                        </select>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <input
+                          type="date"
+                          value={filterAccesoFecha}
+                          onChange={(e) => setFilterAccesoFecha(e.target.value)}
+                          className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs font-mono focus:border-emerald-500 focus:outline-hidden"
+                        />
+                        {(filterAccesoQuery || filterAccesoResultado !== 'todos' || filterAccesoFecha) && (
                           <button
-                            onClick={() => deliverParcel(p.id)}
-                            className="px-2 py-1 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-500/20 font-bold text-[9px] rounded-lg transition cursor-pointer"
+                            type="button"
+                            onClick={() => {
+                              setFilterAccesoQuery('');
+                              setFilterAccesoResultado('todos');
+                              setFilterAccesoFecha('');
+                            }}
+                            className="px-2.5 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-bold rounded-xl border border-slate-800 transition cursor-pointer"
+                            title="Limpiar Filtros"
                           >
-                            Entregar ✓
+                            ✕
                           </button>
-                        ) : (
-                          <span className="text-slate-500 font-bold text-[9px]">Entregado</span>
                         )}
                       </div>
-                    ))}
-                  </div>
-                </div>
+                    </div>
 
-              </div>
+                    {/* Table of Records */}
+                    <div className="overflow-x-auto border border-[#2d2d32] rounded-2xl bg-[#141417]">
+                      <table className="w-full text-left text-xs font-sans">
+                        <thead className="bg-[#18181D] text-slate-400 uppercase text-[9px] tracking-wider border-b border-[#2d2d32]">
+                          <tr>
+                            <th className="p-3">Fecha & Hora</th>
+                            <th className="p-3">Visitante</th>
+                            <th className="p-3">Residente Anfitrión</th>
+                            <th className="p-3">Destino</th>
+                            <th className="p-3">Vehículo / Placas</th>
+                            <th className="p-3">Folio Token</th>
+                            <th className="p-3">Método</th>
+                            <th className="p-3">Resultado</th>
+                            <th className="p-3 text-right">Detalles</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#2d2d32]/60 text-slate-300">
+                          {(() => {
+                            const filtered = registrosAccesos.filter(reg => {
+                              const q = filterAccesoQuery.toLowerCase().trim();
+                              const matchesQ = !q || 
+                                reg.visitanteNombre.toLowerCase().includes(q) ||
+                                reg.residenteAnfitrion.toLowerCase().includes(q) ||
+                                reg.condoDestino.toLowerCase().includes(q) ||
+                                reg.placas.toLowerCase().includes(q) ||
+                                reg.token.toLowerCase().includes(q);
+
+                              const matchesRes = filterAccesoResultado === 'todos' || reg.resultado === filterAccesoResultado;
+                              const matchesDate = !filterAccesoFecha || reg.fecha === filterAccesoFecha;
+
+                              return matchesQ && matchesRes && matchesDate;
+                            });
+
+                            if (filtered.length === 0) {
+                              return (
+                                <tr>
+                                  <td colSpan={9} className="p-8 text-center text-slate-500 font-sans">
+                                    No se encontraron registros de acceso que coincidan con los filtros seleccionados.
+                                  </td>
+                                </tr>
+                              );
+                            }
+
+                            return filtered.map(reg => (
+                              <tr key={reg.id} className="hover:bg-slate-900/60 transition">
+                                <td className="p-3 font-mono text-[10.5px] text-slate-300 whitespace-nowrap">
+                                  {reg.fechaHora}
+                                </td>
+                                <td className="p-3 font-bold text-white whitespace-nowrap">
+                                  {reg.visitanteNombre}
+                                </td>
+                                <td className="p-3 text-sky-300 whitespace-nowrap">
+                                  {reg.residenteAnfitrion}
+                                </td>
+                                <td className="p-3 font-mono font-bold text-slate-200 whitespace-nowrap">
+                                  {reg.condoDestino}
+                                </td>
+                                <td className="p-3 font-mono text-amber-300 whitespace-nowrap">
+                                  {reg.placas}
+                                </td>
+                                <td className="p-3 font-mono text-[9.5px] text-slate-400 whitespace-nowrap">
+                                  {reg.token}
+                                </td>
+                                <td className="p-3 text-[10px] text-slate-400 whitespace-nowrap">
+                                  {reg.metodo}
+                                </td>
+                                <td className="p-3 whitespace-nowrap">
+                                  <span className={`px-2 py-0.5 rounded text-[8.5px] font-black uppercase font-mono ${
+                                    reg.resultado === 'Autorizado'
+                                      ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                                      : reg.resultado === 'Pase Usado'
+                                      ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                                      : 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+                                  }`}>
+                                    {reg.resultado === 'Autorizado' ? '✓ Autorizado' : reg.resultado}
+                                  </span>
+                                </td>
+                                <td className="p-3 text-right whitespace-nowrap">
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedAccesoDetail(reg)}
+                                    className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-slate-300 text-[10px] font-bold rounded-lg border border-slate-700 transition cursor-pointer"
+                                  >
+                                    Ver Ticket
+                                  </button>
+                                </td>
+                              </tr>
+                            ));
+                          })()}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Detail Ticket Modal for an Access Record */}
+                  {selectedAccesoDetail && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+                      <div className="bg-[#18181D] border border-[#2d2d32] rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 text-left">
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                          <div className="flex items-center gap-2">
+                            <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                            <h4 className="text-sm font-black text-white uppercase font-mono">Comprobante de Acceso Caseta</h4>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedAccesoDetail(null)}
+                            className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
+                          >
+                            ✕
+                          </button>
+                        </div>
+
+                        <div className="space-y-2 text-xs">
+                          <div className="p-3 bg-[#121215] border border-slate-800 rounded-xl space-y-1.5">
+                            <p><strong className="text-slate-400">Folio:</strong> <span className="font-mono text-emerald-400 font-bold">{selectedAccesoDetail.token}</span></p>
+                            <p><strong className="text-slate-400">Fecha y Hora:</strong> <span className="font-mono text-white">{selectedAccesoDetail.fechaHora}</span></p>
+                            <p><strong className="text-slate-400">Visitante:</strong> <span className="text-white font-bold">{selectedAccesoDetail.visitanteNombre}</span></p>
+                            <p><strong className="text-slate-400">Residente Anfitrión:</strong> <span className="text-sky-300">{selectedAccesoDetail.residenteAnfitrion}</span></p>
+                            <p><strong className="text-slate-400">Destino:</strong> <span className="text-white font-bold">{selectedAccesoDetail.condoDestino}</span></p>
+                            <p><strong className="text-slate-400">Vehículo / Placas:</strong> <span className="text-amber-300 font-mono">{selectedAccesoDetail.placas}</span></p>
+                            <p><strong className="text-slate-400">Tipo de Ingreso:</strong> <span>{selectedAccesoDetail.tipoVisita}</span></p>
+                            <p><strong className="text-slate-400">Método de Validación:</strong> <span>{selectedAccesoDetail.metodo}</span></p>
+                            <p><strong className="text-slate-400">Oficial en Caseta:</strong> <span>{selectedAccesoDetail.guardiaNombre}</span></p>
+                            <p><strong className="text-slate-400">Observaciones:</strong> <span className="text-slate-300 italic">{selectedAccesoDetail.observaciones}</span></p>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setSelectedAccesoDetail(null)}
+                          className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl border border-slate-700 transition cursor-pointer"
+                        >
+                          Cerrar Comprobante
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+              )}
+
+              {/* TAB 3: INTERFÓN DIGITAL, PAQUETERÍA & NOVEDADES */}
+              {guardiaTab === 'interfon_paqueteria' && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
+                  
+                  {/* MODULE 1: INTERFÓN DIGITAL */}
+                  <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-2xl p-5 space-y-4">
+                    <div>
+                      <span className="text-[9px] font-bold text-sky-400 uppercase tracking-widest font-mono">Comunicación Directa</span>
+                      <h3 className="text-base font-black text-white mt-1">Interfón Digital de Caseta</h3>
+                      <p className="text-xs text-slate-400 mt-0.5">Llamada de voz a departamento sin cables.</p>
+                    </div>
+
+                    <div className="space-y-3 font-sans text-xs">
+                      <div>
+                        <label className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Buscar Departamento / Torre</label>
+                        <input
+                          type="text"
+                          value={intercomTarget}
+                          onChange={(e) => setIntercomTarget(e.target.value)}
+                          placeholder="Ej. Torre A - Depto 402"
+                          className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono text-xs"
+                        />
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          onClick={triggerIntercomCall}
+                          disabled={intercomState === 'calling' || intercomState === 'connected'}
+                          className="flex-1 py-2.5 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <PhoneCall className="w-4 h-4" /> Timbrar
+                        </button>
+                        {intercomState !== 'idle' && (
+                          <button
+                            onClick={endIntercomCall}
+                            className="px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl transition cursor-pointer"
+                          >
+                            Colgar 📞
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="bg-slate-950 border border-slate-900 rounded-xl p-3 font-mono text-[9.5px] max-h-36 overflow-y-auto space-y-1">
+                        <span className="text-slate-500 font-bold block border-b border-slate-850 pb-1">Bitácora de Interfón</span>
+                        {intercomLogs.map((log, i) => (
+                          <div key={i} className="text-slate-300">{log}</div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* MODULE 2: CONTROL DE PAQUETERÍA */}
+                  <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-2xl p-5 space-y-4">
+                    <div>
+                      <span className="text-[9px] font-bold text-purple-400 uppercase tracking-widest font-mono">Recepción de Envíos</span>
+                      <h3 className="text-base font-black text-white mt-1">Control de Paquetería</h3>
+                      <p className="text-xs text-slate-400 mt-0.5">Registra la recepción de paquetes de Amazon, Mercado Libre, etc.</p>
+                    </div>
+
+                    <form onSubmit={handleRegisterParcel} className="space-y-3 font-sans text-xs">
+                      <div>
+                        <input
+                          type="text"
+                          required
+                          value={parcelResident}
+                          onChange={(e) => setParcelResident(e.target.value)}
+                          placeholder="Residente / Depto (ej: Clicerio / A-402)"
+                          className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          required
+                          value={parcelCarrier}
+                          onChange={(e) => setParcelCarrier(e.target.value)}
+                          placeholder="Paquetera (Amazon/DHL)"
+                          className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs"
+                        />
+                        <input
+                          type="text"
+                          required
+                          value={parcelTracking}
+                          onChange={(e) => setParcelTracking(e.target.value)}
+                          placeholder="# Guía o Tracking"
+                          className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs font-mono"
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        <Package className="w-4 h-4" /> Registrar e Notificar
+                      </button>
+                    </form>
+
+                    <div className="max-h-40 overflow-y-auto space-y-2 pt-1">
+                      {parcels.map(p => (
+                        <div key={p.id} className="p-2.5 bg-slate-950 border border-slate-900 rounded-xl flex items-center justify-between text-[10px]">
+                          <div>
+                            <p className="font-bold text-white">{p.carrier} - {p.resident}</p>
+                            <p className="text-slate-500 font-mono text-[9px]">Guía: {p.trackingNumber}</p>
+                          </div>
+                          {p.status === 'en_recepcion' ? (
+                            <button
+                              onClick={() => deliverParcel(p.id)}
+                              className="px-2 py-1 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-500/20 font-bold text-[9px] rounded-lg transition cursor-pointer"
+                            >
+                              Entregar ✓
+                            </button>
+                          ) : (
+                            <span className="text-slate-500 font-bold text-[9px]">Entregado</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* MODULE 3: BITÁCORA DE NOVEDADES DEL GUARDIA & PÁNICO */}
+                  <div className="bg-[#1E1E22] border border-[#2d2d32] rounded-2xl p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-[9px] font-bold text-amber-400 uppercase tracking-widest font-mono">Registro de Turno</span>
+                        <h3 className="text-base font-black text-white mt-1">Novedades en Caseta</h3>
+                        <p className="text-xs text-slate-400 mt-0.5">Asienta rondines, incidencias o cambio de guardia.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleTriggerPanicButton}
+                        className="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 text-white font-black text-[9px] uppercase font-mono rounded-lg transition cursor-pointer animate-pulse"
+                      >
+                        🚨 Pánico
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleAddBitacoraEntry} className="space-y-2 text-xs font-sans">
+                      <div className="grid grid-cols-2 gap-2">
+                        <select
+                          value={newBitTipo}
+                          onChange={(e) => setNewBitTipo(e.target.value as any)}
+                          className="px-2 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-[10px]"
+                        >
+                          <option value="Novedad">Novedad</option>
+                          <option value="Rondín de Seguridad">Rondín</option>
+                          <option value="Cambio de Turno">Cambio Turno</option>
+                          <option value="Incidencia">Incidencia</option>
+                        </select>
+                        <button
+                          type="submit"
+                          className="py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-bold text-[10px] rounded-xl transition cursor-pointer"
+                        >
+                          Asentar Novedad
+                        </button>
+                      </div>
+
+                      <textarea
+                        required
+                        placeholder="Escribe la novedad o reporte del turno..."
+                        value={newBitDesc}
+                        onChange={(e) => setNewBitDesc(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-[10px] min-h-[45px]"
+                      />
+                    </form>
+
+                    <div className="max-h-40 overflow-y-auto space-y-2 pt-1 font-sans">
+                      {bitacoraGuardia.map(bit => (
+                        <div key={bit.id} className="p-2 bg-slate-950 border border-slate-900 rounded-xl text-[10px] space-y-0.5">
+                          <div className="flex items-center justify-between font-bold">
+                            <span className="text-slate-300 font-mono text-[9px]">{bit.tipo}</span>
+                            <span className="text-slate-500 font-mono text-[8.5px]">{bit.fechaHora}</span>
+                          </div>
+                          <p className="text-slate-400">{bit.descripcion}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                </div>
+              )}
             </div>
           )}
 
